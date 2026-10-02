@@ -12,4 +12,6 @@ data class TelemetryState(
     /** Wall-clock timestamp of the last accepted fix; coordinates may be older than the speed. */
     val lastFixEpochMillis: Long? = null,
     val error: String? = null,
+    /** GPS course, only while moving with a fresh accepted fix. */
+    val bearingDegrees: Float? = null,
 )

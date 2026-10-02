@@ -2,23 +2,27 @@
 
 Application Android native en français : tableau de bord sombre, navigation propre à l’application, commandes Apple Music et mesures GPS. Android 10 ou plus récent.
 
-[Télécharger l’APK de test](https://github.com/Anth-off/car-dashboard/releases/download/v0.1.0/cockpit-0.1-debug.apk) · [Paquet AAB pour le partage interne Google Play](https://github.com/Anth-off/car-dashboard/releases/download/v0.1.0/cockpit-0.1-debug.aab) · [Tous les fichiers de la version 0.1](https://github.com/Anth-off/car-dashboard/releases/tag/v0.1.0)
+[Télécharger l’APK de test](https://github.com/Anth-off/car-dashboard/releases/download/v0.2.0/cockpit-0.2.0-debug.apk) · [Paquet AAB pour le partage interne Google Play](https://github.com/Anth-off/car-dashboard/releases/download/v0.2.0/cockpit-0.2.0-debug.aab) · [Tous les fichiers de la version 0.2](https://github.com/Anth-off/car-dashboard/releases/tag/v0.2.0)
 
 ![Aperçu du dashboard sur téléphone, au repos](artifacts/cockpit-landscape.png)
 
-**Version 0.1 : prototype personnel.** Le téléphone utilise une interface Jetpack Compose personnalisée. L’écran Android Auto utilise les modèles de navigation de Google et une carte sur surface projetée : son apparence diffère du téléphone. Une compilation réussie ne valide ni le fonctionnement sur chaque autoradio ni l’acceptation Google Play.
+**Version 0.2 : prototype personnel.** Le téléphone utilise une interface Jetpack Compose personnalisée. L’écran Android Auto utilise les modèles de navigation de Google et une carte sur surface projetée : son apparence diffère du téléphone. Une compilation réussie ne valide ni le fonctionnement sur chaque autoradio ni l’acceptation Google Play.
 
 ## Fonctions
 
 - Vitesse GPS ; affichage « — » si le signal est absent ou périmé.
 - Distance totale enregistrée par l’application, conservée entre sessions.
 - Compteur trajet distinct, réinitialisable quand le suivi est arrêté.
-- Vraie carte OpenStreetMap, itinéraire automobile OSRM, instructions françaises et guidage vocal.
-- Destinations favorites locales ; recherche d’adresse via le service de géocodage Android, saisie manuelle de coordonnées en alternative.
-- Détection de sortie d’itinéraire et recalcul explicite.
+- Carte OpenStreetMap agrandie : priorité en portrait, environ deux tiers de la largeur en paysage et mode plein écran sur téléphone.
+- Déplacement au doigt, zoom pincement/double appui, recentrage GPS et cadrage du trajet entier ; orientation nord ou sens de la marche.
+- Styles jour/nuit, marqueur de destination, échelle, cercle de précision GPS et portion de trajet parcourue atténuée.
+- Itinéraire automobile OSRM, instructions françaises, prochaine manœuvre et suivante, liste des étapes, progression et heure d’arrivée estimée hors trafic.
+- Guidage vocal activable directement dans le bandeau de navigation ; écran maintenu allumé pendant un guidage actif.
+- Recherche d’adresse avec libellés et adresses distincts, favoris locaux et 12 destinations récentes, effaçables séparément ; coordonnées manuelles en alternative.
+- Recalcul automatique après trois positions confirmant la sortie d’itinéraire ; ancien trajet conservé si le réseau échoue et délais progressifs entre tentatives. Recalcul manuel disponible.
 - Lecture/pause, précédent/suivant et métadonnées de la session Apple Music active.
 - Température météo extérieure Open-Meteo, optionnelle, avec date de mise à jour.
-- Android Auto : destinations, carte et guidage, panneau de trajet, commandes musicales.
+- Android Auto : carte avec déplacement et zoom selon les capacités du véhicule, vue d’ensemble, recentrage, guidage et options vocales, panneau de trajet et commandes musicales.
 
 Les compteurs mesurent **uniquement les déplacements enregistrés pendant le suivi GPS**. Ils ne lisent pas le compteur kilométrique du véhicule. Les tunnels, mauvaises positions et arrêts de l’application peuvent laisser des distances non enregistrées. La température n’est pas une mesure d’un capteur de la voiture.
 
@@ -27,8 +31,9 @@ Les compteurs mesurent **uniquement les déplacements enregistrés pendant le su
 1. Installer l’APK de test, ouvrir Cockpit et autoriser la localisation **précise** lors du démarrage du suivi. Le suivi se lance depuis l’application visible et reste signalé par une notification.
 2. Dans les réglages Cockpit, activer la météo si souhaité. Autoriser les notifications Android pour voir le suivi et les indications hors de l’application.
 3. Pour la musique, accorder à Cockpit l’accès spécial aux notifications, puis ouvrir Apple Music et lancer un morceau. Le contrôle nécessite une session Apple Music active ; l’application ne fournit ni abonnement ni catalogue musical.
-4. Choisir une destination, rechercher une adresse ou enregistrer des coordonnées. Accepter l’utilisation du calcul d’itinéraire en ligne, puis attendre une position GPS.
-5. Arrêter le suivi pour mettre fin à l’enregistrement. Le compteur trajet reste conservé jusqu’à sa remise à zéro ; le total reste conservé.
+4. Utiliser la loupe de la carte pour rechercher une destination, sélectionner un favori ou un trajet récent. L’étoile ajoute/retire un favori ; les résultats de recherche ne sont pas enregistrés automatiquement. Un trajet calculé avec succès rejoint les récents.
+5. Accepter l’utilisation du calcul d’itinéraire en ligne, puis attendre une position GPS. Les boutons de carte permettent d’agrandir, zoomer, recentrer et afficher tout le trajet ; le haut-parleur coupe les annonces et la liste ouvre les prochaines étapes.
+6. Arrêter le suivi pour mettre fin à l’enregistrement. Le compteur trajet reste conservé jusqu’à sa remise à zéro ; le total reste conservé.
 
 Les versions Android récentes peuvent limiter l’accès aux notifications pour une application installée manuellement. Le téléphone indique alors les réglages supplémentaires disponibles dans sa fiche d’application. Cockpit n’active aucune permission automatiquement.
 
@@ -69,7 +74,7 @@ Le workflow GitHub Actions **Android test release**, lançable manuellement, com
 
 ## Données, fournisseurs et limites
 
-- Les compteurs et les favoris sont stockés uniquement dans les préférences locales. Aucune trace GPS n’est conservée ; la sauvegarde cloud Android est désactivée.
+- Les compteurs, les favoris et les 12 destinations récentes sont stockés uniquement dans les préférences locales. Aucune trace GPS n’est conservée ; la sauvegarde cloud Android est désactivée.
 - La position actuelle et la destination sont transmises à `router.project-osrm.org` pour calculer l’itinéraire. C’est un serveur public de démonstration : **pas de garantie de disponibilité, pas de trafic en direct**. Prévoir un fournisseur ou une instance OSRM dédiée pour un usage distribué.
 - Les tuiles affichées sont demandées à `tile.openstreetmap.org`. Cache HTTP respecté, seules les tuiles visibles sont chargées, aucun téléchargement massif. Une connexion reste nécessaire pour les zones absentes du cache. Attribution permanente : [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright), données sous ODbL. Respecter la [politique des tuiles](https://operations.osmfoundation.org/policies/tiles/) et prévoir un fournisseur adapté pour une application diffusée largement.
 - La météo désactivée par défaut transmet une position arrondie à deux décimales à [Open-Meteo](https://open-meteo.com/) au maximum toutes les 15 minutes pendant le suivi. Les relevés et coordonnées météo ne sont pas persistés. Vérifier les conditions du fournisseur pour une diffusion commerciale.
@@ -82,9 +87,9 @@ Le workflow GitHub Actions **Android test release**, lançable manuellement, com
 
 `ui/` : dashboard et réglages Compose. `telemetry/` : suivi GPS et compteurs. `navigation/` : itinéraires, progression et voix. `map/` : rendu cartographique partagé téléphone/voiture. `integrations/` : musique et météo. `destinations/` : favoris et géocodage. `car/` : service et écrans Android Auto.
 
-Les tests JVM couvrent des scénarios de filtrage GPS et de progression de navigation, notamment les sauts de position et l’arrivée prématurée sur un trajet en boucle.
+Les tests JVM couvrent le filtrage GPS, la progression et l’arrivée sur un trajet en boucle, les fixes dupliqués, le recalcul et ses délais, la projection Mercator, le cadrage des routes à travers l’antiméridien et le zoom focal. Les tests de destinations vérifient aussi la compatibilité du stockage précédent, la persistance et la déduplication des récents.
 
-Les tests Robolectric vérifient aussi les modèles Android Auto sur les niveaux d’API voiture 1 et 7, le retour aux destinations, les manœuvres et le lancement/rendu réel de l’Activity en portrait et paysage. Pour produire les aperçus de l’interface avec le moteur graphique Android natif de Robolectric :
+Les tests Robolectric vérifient aussi les modèles Android Auto sur les niveaux d’API voiture 1 et 7, le retour aux destinations, les manœuvres et le lancement/rendu réel de l’Activity en portrait et paysage, ainsi que les commandes plein écran, recherche, voix et arrêt du guidage. Pour produire les aperçus de l’interface avec le moteur graphique Android natif de Robolectric :
 
 ```sh
 ./gradlew -Dcockpit.screenshot.dir="$PWD/artifacts" :app:testDebugUnitTest

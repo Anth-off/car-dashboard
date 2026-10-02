@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
                         musicConnected = audio.connected, musicPlaying = audio.playing,
                         canPlayPause = audio.canPlayPause, canPrevious = audio.canPrevious, canNext = audio.canNext,
                         destinations = destinations, latitude = trip.latitude, longitude = trip.longitude,
-                        navigation = route,
+                        navigation = route, bearing = trip.bearingDegrees, accuracyMeters = trip.accuracyMeters,
                     ),
                     onTracking = {
                         if (trip.recording) {
@@ -89,6 +89,7 @@ class MainActivity : ComponentActivity() {
                     onDestinations = { destinationsOpen = true },
                     onStopNavigation = { navigation.stop() },
                     onReroute = { navigation.reroute() },
+                    onVoiceEnabled = navigation::setVoiceEnabled,
                     onMusic = {
                         if (!music.hasAccess()) settingsOpen = true
                         else if (!music.launchAppleMusic()) message("Apple Music n’est pas installé sur ce téléphone.")

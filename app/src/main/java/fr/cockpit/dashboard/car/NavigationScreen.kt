@@ -21,11 +21,15 @@ import androidx.car.app.navigation.model.RoutingInfo
 import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
+import fr.cockpit.dashboard.map.MapCamera
+import fr.cockpit.dashboard.map.MapProjection
 import fr.cockpit.dashboard.map.RouteMapRenderer
+import fr.cockpit.dashboard.navigation.GeoPoint
 import fr.cockpit.dashboard.navigation.NavigationRepository
 import fr.cockpit.dashboard.telemetry.TripRepository
 import fr.cockpit.dashboard.telemetry.TelemetryState
 import java.util.Locale
+import kotlin.math.log2
 
 internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carContext) {
     private val navigation = NavigationRepository.get(carContext)
@@ -36,10 +40,13 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
     private var surfaceWidth = 0
     private var surfaceHeight = 0
     private var surfaceDensity = 1f
-    private var visibleArea = Rect()
+    private var visibleArea: Rect? = null
+    private var stableArea: Rect? = null
+    private var camera: MapCamera? = null
     private var visible = false
     private val zoomInIcon by lazy { symbolIcon("+") }
     private val zoomOutIcon by lazy { symbolIcon("−") }
+    private val recenterIcon by lazy { positionIcon() }
 
     private val surfaceCallback = object : SurfaceCallback {
         override fun onSurfaceAvailable(surfaceContainer: SurfaceContainer) {
@@ -52,7 +59,7 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
             surface = nextSurface
             surfaceWidth = surfaceContainer.width
             surfaceHeight = surfaceContainer.height
-            surfaceDensity = (surfaceContainer.dpi / 160f).coerceAtLeast(1f)
+            surfaceDensity = (surfaceContainer.dpi / 160f).coerceIn(1f, 3f)
             drawMap()
         }
 
@@ -62,6 +69,31 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
 
         override fun onVisibleAreaChanged(area: Rect) {
             visibleArea = Rect(area)
+            drawMap()
+        }
+
+        override fun onStableAreaChanged(area: Rect) {
+            stableArea = Rect(area)
+            drawMap()
+        }
+
+        override fun onScroll(distanceX: Float, distanceY: Float) {
+            if (!distanceX.isFinite() || !distanceY.isFinite()) return
+            val current = currentCamera() ?: return
+            camera = MapProjection.pan(current, distanceX, distanceY, surfaceDensity)
+            drawMap()
+        }
+
+        override fun onScale(focusX: Float, focusY: Float, scaleFactor: Float) {
+            if (!scaleFactor.isFinite() || scaleFactor <= 0f) return
+            val current = currentCamera() ?: return
+            val area = mapViewport()
+            if (area.isEmpty) return
+            // A host may supply -1 when it cannot identify the gesture's focal point.
+            val x = if (focusX.isFinite() && focusX >= 0f) focusX - area.left else area.width() / 2f
+            val y = if (focusY.isFinite() && focusY >= 0f) focusY - area.top else area.height() / 2f
+            camera = MapProjection.zoomAt(current, current.zoom + log2(scaleFactor),
+                x, y, area.width(), area.height(), surfaceDensity)
             drawMap()
         }
     }
@@ -99,27 +131,26 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
                 Action.Builder().setTitle("Infos")
                     .setOnClickListener { screenManager.push(TripScreen(carContext)) }.build()
             )
+            .addAction(
+                Action.Builder().setTitle("Guidage")
+                    .setOnClickListener {
+                        screenManager.push(NavigationOptionsScreen(carContext, ::recenter, ::showOverview))
+                    }.build()
+            )
         if (state.active || state.loading) {
             actions.addAction(
                 Action.Builder().setTitle("Arrêter")
                     .setOnClickListener { navigation.stop() }.build()
             )
         }
-        if (!state.loading && state.destination != null && (state.offRoute || state.error != null)) {
-            actions.addAction(
-                Action.Builder().setTitle("Recalculer")
-                    .setOnClickListener {
-                        if (canStartCarNavigation(carContext)) navigation.reroute()
-                    }.build()
-            )
-        }
-
         val routing: NavigationTemplate.NavigationInfo = when {
             state.loading -> RoutingInfo.Builder().setLoading(true).build()
-            state.active && state.distanceToTurnMeters == null -> MessageInfo.Builder("Guidage en pause")
+            state.active && (state.gpsPaused || state.distanceToTurnMeters == null) -> MessageInfo.Builder(
+                if (state.offRoute) "Hors itinéraire" else "Guidage en pause")
                 .setText(state.instruction).build()
             state.active || state.arrived -> RoutingInfo.Builder()
                 .setCurrentStep(carStep(state), carDistance(state.distanceToTurnMeters ?: 0.0))
+                .apply { state.followingStep?.let { setNextStep(carRouteStep(it)) } }
                 .build()
             else -> {
                 val message = state.error
@@ -133,7 +164,8 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
             .setNavigationInfo(routing)
             .setActionStrip(actions.build())
 
-        if (state.active && state.remainingMeters != null && state.remainingSeconds != null) {
+        if (state.active && !state.loading && !state.gpsPaused && !state.offRoute &&
+            state.remainingMeters != null && state.remainingSeconds != null) {
             template.setDestinationTravelEstimate(
                 carTravelEstimate(state.remainingMeters, state.remainingSeconds)
             )
@@ -141,20 +173,22 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         if (carContext.carAppApiLevel >= 2) {
             template.setMapActionStrip(
                 ActionStrip.Builder()
+                    .addAction(Action.PAN)
                     .addAction(
                         Action.Builder().setIcon(zoomInIcon).setOnClickListener {
-                            map.zoom = (map.zoom + 1).coerceAtMost(18)
-                            drawMap()
+                            changeZoom(1)
                         }.build()
                     )
                     .addAction(
                         Action.Builder().setIcon(zoomOutIcon).setOnClickListener {
-                            map.zoom = (map.zoom - 1).coerceAtLeast(3)
-                            drawMap()
+                            changeZoom(-1)
                         }.build()
                     )
+                    .addAction(Action.Builder().setIcon(recenterIcon)
+                        .setOnClickListener(::recenter).build())
                     .build()
             )
+            template.setPanModeListener { inPanMode -> if (!inPanMode) recenter() }
         }
         drawMap()
         return template.build()
@@ -168,8 +202,11 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         try {
             canvas = target.lockCanvas(null)
             canvas.drawColor(Color.rgb(12, 18, 24))
-            val area = Rect(0, 0, surfaceWidth, surfaceHeight)
-            if (!visibleArea.isEmpty && !area.intersect(visibleArea)) return
+            val area = carMapViewport(surfaceWidth, surfaceHeight, visibleArea, null)
+            val safeArea = mapViewport()
+            if (area.isEmpty || safeArea.isEmpty) return
+            lastMapWidth = safeArea.width()
+            lastMapHeight = safeArea.height()
             val saved = canvas.save()
             canvas.clipRect(area)
             canvas.translate(area.left.toFloat(), area.top.toFloat())
@@ -177,18 +214,27 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
             val guidance = navigation.state.value
             val latitude = if (guidance.isSimulation) guidance.currentPosition?.latitude else position.latitude
             val longitude = if (guidance.isSimulation) guidance.currentPosition?.longitude else position.longitude
-            // The canvas is exclusively map content; setup/error messages belong in the template.
-            if (latitude != null && longitude != null) {
-                map.render(
-                    canvas,
-                    area.width(),
-                    area.height(),
-                    latitude,
-                    longitude,
-                    guidance.route?.points.orEmpty(),
-                )
-                drawDrivingInfo(canvas, area.width(), area.height(), position, guidance.isSimulation)
+            // Fill all visible space, while positioning the GPS marker in the stable area. This
+            // keeps the map large and stops host controls appearing over the vehicle marker.
+            val mapCamera = currentCamera()?.let {
+                MapProjection.pan(it, area.exactCenterX() - safeArea.exactCenterX(),
+                    area.exactCenterY() - safeArea.exactCenterY(), surfaceDensity)
             }
+            map.render(
+                canvas, area.width(), area.height(), latitude, longitude,
+                guidance.route?.points.orEmpty(),
+                bearing = if (guidance.isSimulation) null else position.bearingDegrees,
+                camera = mapCamera,
+                nightMode = carContext.isDarkMode,
+                accuracyMeters = if (guidance.isSimulation) null else position.accuracyMeters,
+                destination = guidance.destination?.let { GeoPoint(it.latitude, it.longitude) },
+                progressFraction = guidance.progressFraction.toFloat(),
+                densityOverride = surfaceDensity,
+            )
+            val infoSaved = canvas.save()
+            canvas.translate((safeArea.left - area.left).toFloat(), (safeArea.top - area.top).toFloat())
+            drawDrivingInfo(canvas, safeArea.width(), safeArea.height(), position, guidance.isSimulation)
+            canvas.restoreToCount(infoSaved)
             canvas.restoreToCount(saved)
         } catch (_: RuntimeException) {
             // A projected surface may be replaced between a frame request and canvas locking.
@@ -202,15 +248,57 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         surface = null
         surfaceWidth = 0
         surfaceHeight = 0
-        visibleArea = Rect()
+        visibleArea = null
+        stableArea = null
     }
+
+    private fun mapViewport(): Rect = carMapViewport(surfaceWidth, surfaceHeight, visibleArea, stableArea)
+
+    private fun currentCamera(): MapCamera? {
+        camera?.let { return it }
+        val guidance = navigation.state.value
+        val position = trip.state.value
+        val point = if (guidance.isSimulation) guidance.currentPosition
+            else position.latitude?.let { latitude -> position.longitude?.let { GeoPoint(latitude, it) } }
+        return point?.takeIf(MapProjection::isValid)?.let { MapCamera(it, map.zoom.toFloat()) }
+    }
+
+    private fun changeZoom(delta: Int) {
+        val custom = camera
+        if (custom != null) camera = custom.copy(zoom = (custom.zoom + delta)
+            .coerceIn(MapProjection.MIN_ZOOM, MapProjection.MAX_ZOOM))
+        else map.zoom = (map.zoom + delta)
+            .coerceIn(MapProjection.MIN_ZOOM.toInt(), MapProjection.MAX_ZOOM.toInt())
+        drawMap()
+    }
+
+    private fun recenter() {
+        camera = null
+        drawMap()
+    }
+
+    private fun showOverview(): Boolean {
+        val points = navigation.state.value.route?.points ?: return false
+        val area = mapViewport()
+        // The surface may be temporarily released while the options screen covers the map.
+        // Its last stable dimensions remain available for framing when the map returns.
+        val width = area.width().takeIf { it > 0 } ?: lastMapWidth
+        val height = area.height().takeIf { it > 0 } ?: lastMapHeight
+        val overview = MapProjection.fitRoute(points, width, height, surfaceDensity) ?: return false
+        camera = overview
+        drawMap()
+        return true
+    }
+
+    private var lastMapWidth = 0
+    private var lastMapHeight = 0
 
     /** Driving information is kept in the host's visible safe area, clear of map attribution. */
     private fun drawDrivingInfo(canvas: Canvas, width: Int, height: Int, data: TelemetryState, simulation: Boolean) {
         val density = surfaceDensity
         val margin = 12f * density
-        val cardWidth = 164f * density
-        val cardHeight = 108f * density
+        val cardWidth = 88f * density
+        val cardHeight = 72f * density
         if (width < cardWidth + margin * 2 || height < cardHeight + margin * 3 + 28f * density) return
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         paint.color = Color.argb(230, 13, 23, 33)
@@ -220,24 +308,37 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
             12f * density,
             paint,
         )
-        val left = margin + 14f * density
+        val left = margin + 10f * density
         paint.color = Color.rgb(153, 178, 192)
-        paint.textSize = 11f * density
-        canvas.drawText(if (simulation) "SIMULATION" else "VITESSE GPS", left, margin + 23f * density, paint)
+        paint.textSize = 10f * density
+        canvas.drawText(if (simulation) "SIMULATION" else "VITESSE GPS", left, margin + 17f * density, paint)
         paint.color = Color.rgb(121, 238, 224)
-        paint.textSize = 34f * density
+        paint.textSize = if (simulation) 23f * density else 32f * density
         paint.isFakeBoldText = true
         val speed = if (simulation) "DÉMO" else data.speedKmh?.let { String.format(Locale.FRANCE, "%.0f", it) } ?: "—"
-        canvas.drawText(speed, left, margin + 62f * density, paint)
-        val speedWidth = paint.measureText(speed)
+        canvas.drawText(speed, left, margin + 48f * density, paint)
         paint.isFakeBoldText = false
-        paint.textSize = 13f * density
+        paint.textSize = 10f * density
         paint.color = Color.WHITE
-        if (!simulation) canvas.drawText("km/h", left + speedWidth + 6f * density, margin + 61f * density, paint)
-        paint.color = Color.rgb(204, 218, 227)
-        paint.textSize = 12f * density
-        val trip = if (simulation) "Compteurs inchangés" else String.format(Locale.FRANCE, "Trajet GPS · %.1f km", data.tripMeters / 1_000.0)
-        canvas.drawText(trip, left, margin + 87f * density, paint)
+        canvas.drawText(if (simulation) "GPS simulé" else "km/h", left, margin + 63f * density, paint)
+    }
+
+    private fun positionIcon(): CarIcon {
+        val bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = 4f
+        }
+        canvas.drawCircle(32f, 32f, 17f, paint)
+        canvas.drawLine(32f, 4f, 32f, 19f, paint)
+        canvas.drawLine(32f, 45f, 32f, 60f, paint)
+        canvas.drawLine(4f, 32f, 19f, 32f, paint)
+        canvas.drawLine(45f, 32f, 60f, 32f, paint)
+        paint.style = Paint.Style.FILL
+        canvas.drawCircle(32f, 32f, 5f, paint)
+        return CarIcon.Builder(IconCompat.createWithBitmap(bitmap)).build()
     }
 
     private fun symbolIcon(symbol: String): CarIcon {
@@ -251,4 +352,15 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         Canvas(bitmap).drawText(symbol, 32f, 50f, paint)
         return CarIcon.Builder(IconCompat.createWithBitmap(bitmap)).build()
     }
+}
+
+/** Host overlays must not hide the GPS marker, map attribution, or compact speed indicator. */
+internal fun carMapViewport(width: Int, height: Int, visible: Rect?, stable: Rect?): Rect {
+    val area = Rect(0, 0, width.coerceAtLeast(0), height.coerceAtLeast(0))
+    if (visible != null && (visible.isEmpty || !area.intersect(visible))) return Rect()
+    if (stable != null && !stable.isEmpty) {
+        val intersection = Rect(area)
+        if (intersection.intersect(stable)) return intersection
+    }
+    return area
 }

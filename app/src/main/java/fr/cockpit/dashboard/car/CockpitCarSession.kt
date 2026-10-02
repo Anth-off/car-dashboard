@@ -23,6 +23,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.util.UUID
 
 /** Navigation focus and cluster data survive switching from the map to another app screen. */
 internal class CockpitCarSession : Session() {
@@ -104,10 +105,19 @@ internal class CockpitCarSession : Session() {
                 val distance = state.distanceToTurnMeters
                 if (distance != null) {
                     trip.addStep(carStep(state), carTravelEstimate(distance, secondsToStep(state)))
+                    val following = state.followingStep
+                    val next = state.nextStep
+                    if (following != null && next != null) {
+                        val followingDistance = distance +
+                            (following.routeOffsetMeters - next.routeOffsetMeters).coerceAtLeast(0.0)
+                        trip.addStep(carRouteStep(following), carTravelEstimate(followingDistance,
+                            secondsToStep(state) + next.durationSeconds.toLong().coerceAtLeast(0)))
+                    }
                 }
             }
             val destination = state.destination
-            if (destination != null && state.remainingMeters != null && state.remainingSeconds != null) {
+            if (!state.loading && !state.gpsPaused && !state.offRoute && destination != null &&
+                state.remainingMeters != null && state.remainingSeconds != null) {
                 trip.addDestination(
                     androidx.car.app.navigation.model.Destination.Builder()
                         .setName(destination.name).build(),
@@ -149,7 +159,7 @@ internal class CockpitCarSession : Session() {
                         ?: data.schemeSpecificPart.substringBefore('?')
                     val coordinates = coordinateText.split(',').mapNotNull { it.trim().toDoubleOrNull() }
                     if (coordinates.size == 2 && coordinates[0] in -90.0..90.0 && coordinates[1] in -180.0..180.0) {
-                        Destination("external", "Destination demandée", coordinates[0], coordinates[1])
+                        Destination(UUID.randomUUID().toString(), "Destination demandée", coordinates[0], coordinates[1])
                     } else {
                         DestinationRepository.get(carContext).search(query ?: coordinateText).firstOrNull()
                     }

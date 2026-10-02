@@ -5,6 +5,7 @@ package fr.cockpit.dashboard.car
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Looper
 import androidx.car.app.CarContext
@@ -64,8 +65,15 @@ class CarTemplateSmokeTest {
             NavigationRepository.get(navigationContext).stop()
             val navigation = render(NavigationScreen(navigationContext)) as NavigationTemplate
             assertNotNull(navigation.navigationInfo)
-            assertEquals(2, navigation.actionStrip!!.actions.size)
-            if (api >= 2) assertEquals(2, navigation.mapActionStrip!!.actions.size)
+            assertEquals(3, navigation.actionStrip!!.actions.size)
+            if (api >= 2) {
+                assertEquals(4, navigation.mapActionStrip!!.actions.size)
+                assertTrue(navigation.mapActionStrip!!.actions.contains(Action.PAN))
+                assertNotNull(navigation.panModeDelegate)
+            }
+
+            val options = render(NavigationOptionsScreen(carContext(api), {}, { false })) as ListTemplate
+            assertEquals(6, options.singleList!!.items.size)
         }
     }
 
@@ -120,13 +128,24 @@ class CarTemplateSmokeTest {
     }
 
     @Test
-    fun navigationSupportsFourTitledActionsIncludingReroute() = onMain {
+    fun navigationSupportsFourTitledActionsIncludingGuidanceOptions() = onMain {
         val actions = ActionStrip.Builder()
-        listOf("Destinations", "Infos", "Arrêter", "Recalculer").forEach { title ->
+        listOf("Destinations", "Infos", "Guidage", "Arrêter").forEach { title ->
             actions.addAction(Action.Builder().setTitle(title).setOnClickListener {}.build())
         }
         val template = NavigationTemplate.Builder().setActionStrip(actions.build()).build()
         assertEquals(4, template.actionStrip!!.actions.size)
+    }
+
+    @Test
+    fun mapViewportUsesStableSpaceAndRespectsHostOcclusion() {
+        val stable = Rect(200, 40, 900, 550)
+        assertEquals(stable, carMapViewport(1_000, 600, Rect(100, 0, 1_000, 600), stable))
+        assertEquals(Rect(250, 40, 900, 500),
+            carMapViewport(1_000, 600, Rect(250, 0, 1_000, 500), stable))
+        assertEquals(Rect(0, 0, 1_000, 600), carMapViewport(1_000, 600, null, null))
+        assertTrue(carMapViewport(1_000, 600, Rect(), stable).isEmpty)
+        assertTrue(carMapViewport(1_000, 600, Rect(1_100, 0, 1_200, 600), stable).isEmpty)
     }
 
     @SuppressLint("RestrictedApi")

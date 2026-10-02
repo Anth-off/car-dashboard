@@ -1,7 +1,9 @@
 package fr.cockpit.dashboard.navigation
 
 import android.content.Context
+import android.os.SystemClock
 import fr.cockpit.dashboard.destinations.Destination
+import fr.cockpit.dashboard.destinations.DestinationRepository
 import fr.cockpit.dashboard.telemetry.TelemetryState
 import fr.cockpit.dashboard.telemetry.TripRepository
 import kotlinx.coroutines.*
@@ -27,6 +29,9 @@ class NavigationRepository private constructor(context: Context) {
     private val mutableState = MutableStateFlow(NavigationState(voiceEnabled = preferences.getBoolean("voice_enabled", true)))
     val state: StateFlow<NavigationState> = mutableState.asStateFlow()
     private var request: Job? = null
+    private var requestGeneration = 0L
+    private var requestedDestination: Destination? = null
+    private val reroutePolicy = AutomaticReroutePolicy()
     private var progress: RouteProgressEngine? = null
     private var lastSpeechKey: String? = null
     private var lastConsumedFixTime: Long? = null
@@ -46,25 +51,43 @@ class NavigationRepository private constructor(context: Context) {
 
     /** Requests a genuine driving route. Cancels any older pending route request. */
     fun start(destination: Destination) {
+        if (destination != state.value.destination) reroutePolicy.reset()
+        requestRoute(destination, automatic = false)
+    }
+
+    private fun requestRoute(destination: Destination, automatic: Boolean) {
         request?.cancel()
+        val generation = ++requestGeneration
+        requestedDestination = destination
+        if (!automatic) reroutePolicy.requestStarted(SystemClock.elapsedRealtime())
         request = scope.launch {
-            voice.stop()
+            if (!automatic) voice.stop()
             mutableState.value = mutableState.value.copy(
                 loading = true, error = null,
+                rerouting = state.value.active,
                 destination = if (state.value.active) state.value.destination else destination,
                 arrived = false,
-                instruction = "Recherche du signal GPS…",
+                instruction = if (hasFreshFix(trips.state.value)) {
+                    if (state.value.active) "Recalcul de l’itinéraire…" else "Calcul de l’itinéraire…"
+                } else "Recherche du signal GPS…",
             )
-            val telemetry = withTimeoutOrNull(20_000) { trips.state.first(::hasFreshFix) }
-            if (telemetry == null) {
-                mutableState.value = mutableState.value.copy(
-                    loading = false, error = "Pas de position GPS récente. Démarre l’enregistrement et attends le signal.",
-                    instruction = if (state.value.active) "Guidage en pause · GPS nécessaire" else "GPS nécessaire pour calculer l’itinéraire",
-                )
-                return@launch
-            }
-            mutableState.value = mutableState.value.copy(instruction = "Calcul de l’itinéraire…")
             try {
+                val telemetry = withTimeoutOrNull(20_000) { trips.state.first(::hasFreshFix) }
+                if (telemetry == null) {
+                    mutableState.value = mutableState.value.copy(
+                        loading = false, rerouting = false, gpsPaused = true,
+                        distanceToTurnMeters = null, remainingMeters = null, remainingSeconds = null,
+                        nextStep = null, followingStep = null,
+                        error = "Pas de position GPS récente. Démarre l’enregistrement et attends le signal.",
+                        instruction = if (state.value.active) "Guidage en pause · GPS nécessaire" else "GPS nécessaire pour calculer l’itinéraire",
+                    )
+                    reroutePolicy.requestFinished(success = false, SystemClock.elapsedRealtime())
+                    return@launch
+                }
+                mutableState.value = mutableState.value.copy(
+                    gpsPaused = false,
+                    instruction = if (state.value.active) "Recalcul de l’itinéraire…" else "Calcul de l’itinéraire…",
+                )
                 val route = router.route(GeoPoint(telemetry.latitude!!, telemetry.longitude!!), destination)
                 ensureActive()
                 progress = RouteProgressEngine(route)
@@ -77,15 +100,22 @@ class NavigationRepository private constructor(context: Context) {
                     remainingSeconds = route.totalSeconds.toLong(), voiceEnabled = state.value.voiceEnabled,
                     isSimulation = simulationEnabled,
                 )
+                DestinationRepository.get(applicationContext).recordVisit(destination)
+                reroutePolicy.requestFinished(success = true, SystemClock.elapsedRealtime())
                 if (simulationEnabled) simulateNextFix() else updateTelemetry(trips.state.value)
             } catch (cancelled: CancellationException) {
+                if (generation == requestGeneration) reroutePolicy.requestCancelled()
                 throw cancelled
             } catch (failure: Exception) {
+                // An HTTP failure may arrive after cancellation of its blocking socket read.
+                // It must never replace the state of a newer destination request.
+                ensureActive()
                 mutableState.value = mutableState.value.copy(
-                    loading = false,
+                    loading = false, rerouting = false,
                     error = failure.message?.take(220) ?: "Le calcul de l’itinéraire a échoué. Vérifie la connexion internet.",
                     instruction = if (state.value.active) "Itinéraire précédent conservé" else "Itinéraire indisponible",
                 )
+                reroutePolicy.requestFinished(success = false, SystemClock.elapsedRealtime())
             }
         }
     }
@@ -94,9 +124,12 @@ class NavigationRepository private constructor(context: Context) {
 
     fun stop() {
         request?.cancel()
+        requestGeneration++
+        reroutePolicy.reset()
         scope.launch {
             voice.stop()
             progress = null
+            requestedDestination = null
             lastConsumedFixTime = null
             lastSpeechKey = null
             simulationEnabled = false
@@ -126,6 +159,8 @@ class NavigationRepository private constructor(context: Context) {
                 // Simulated progress cannot be reused with a physical GPS fix. Require a new route
                 // from the current real position instead of silently resetting an active route.
                 request?.cancel()
+                requestGeneration++
+                reroutePolicy.reset()
                 voice.stop()
                 progress = null
                 mutableState.value = NavigationState(
@@ -146,6 +181,7 @@ class NavigationRepository private constructor(context: Context) {
             mutableState.value = mutableState.value.copy(
                 instruction = if (telemetry.recording) "Signal GPS perdu · guidage en pause" else "Guidage en pause · démarre le GPS sur le téléphone",
                 distanceToTurnMeters = null, remainingMeters = null, remainingSeconds = null,
+                nextStep = null, followingStep = null, gpsPaused = true,
             )
             if (lastSpeechKey != "gps-lost") {
                 announce("Signal GPS perdu. Le guidage est en pause.")
@@ -154,7 +190,7 @@ class NavigationRepository private constructor(context: Context) {
             return
         }
         val time = telemetry.lastFixEpochMillis!!
-        if (lastConsumedFixTime == time) return
+        if (lastConsumedFixTime?.let { time <= it } == true) return
         lastConsumedFixTime = time
         applyFix(GeoPoint(telemetry.latitude!!, telemetry.longitude!!), telemetry.accuracyMeters!!.toDouble(), time)
     }
@@ -163,18 +199,32 @@ class NavigationRepository private constructor(context: Context) {
         val route = state.value.route ?: return
         val result = progress?.update(point, accuracy, timestamp) ?: return
         val step = route.steps[result.nextStepIndex]
+        val completedPendingDestination = result.arrived && state.value.loading && requestedDestination == state.value.destination
+        if (completedPendingDestination) {
+            request?.cancel()
+            requestGeneration++
+            reroutePolicy.reset()
+        }
         val instruction = when {
             result.arrived -> "Vous êtes arrivé à destination"
-            result.offRoute -> "Hors itinéraire · recalcule le trajet"
+            result.offRoute && state.value.rerouting -> "Recalcul de l’itinéraire…"
+            result.offRoute -> "Hors itinéraire · recalcul automatique"
             else -> step.instruction
         }
         mutableState.value = mutableState.value.copy(
             active = !result.arrived, arrived = result.arrived, offRoute = result.offRoute,
+            loading = state.value.loading && !completedPendingDestination,
+            rerouting = state.value.rerouting && !completedPendingDestination,
             instruction = if (simulationEnabled) "Simulation · $instruction" else instruction,
             distanceToTurnMeters = if (result.offRoute) null else result.distanceToTurnMeters,
             remainingMeters = if (result.offRoute) null else result.remainingMeters,
             remainingSeconds = if (result.offRoute) null else result.remainingSeconds,
-            nextStep = step,
+            nextStep = if (result.offRoute) null else step,
+            followingStep = if (result.arrived || result.offRoute) null else route.steps.getOrNull(result.nextStepIndex + 1),
+            nextStepIndex = result.nextStepIndex,
+            progressFraction = result.progressFraction,
+            gpsPaused = false,
+            error = if (state.value.offRoute && !result.offRoute) null else state.value.error,
             currentPosition = point,
         )
         val phase = when {
@@ -191,12 +241,21 @@ class NavigationRepository private constructor(context: Context) {
         if (lastSpeechKey != key) {
             val text = when {
                 result.arrived -> "Vous êtes arrivé à destination."
-                result.offRoute -> "Vous avez quitté l’itinéraire. Recalculez le trajet quand vous pouvez le faire."
+                result.offRoute -> "Vous avez quitté l’itinéraire. Recalcul automatique du trajet."
                 result.distanceToTurnMeters < 25 -> step.instruction
                 else -> "Dans ${spokenDistance(result.distanceToTurnMeters)}, ${step.instruction.replaceFirstChar { it.lowercase() }}"
             }
             announce(if (simulationEnabled) "Simulation. $text" else text)
             lastSpeechKey = key
+        }
+        if (state.value.active && reroutePolicy.tryStart(
+                offRoute = result.offRoute,
+                freshFix = hasFreshFix(trips.state.value),
+                simulation = simulationEnabled,
+                nowMillis = SystemClock.elapsedRealtime(),
+            )) {
+            state.value.destination?.let { requestRoute(it, automatic = true) }
+                ?: reroutePolicy.requestCancelled()
         }
     }
 
@@ -216,7 +275,8 @@ class NavigationRepository private constructor(context: Context) {
     private fun hasFreshFix(telemetry: TelemetryState): Boolean {
         val age = telemetry.lastFixEpochMillis?.let { System.currentTimeMillis() - it } ?: return false
         return telemetry.recording && age in 0..7_000 && telemetry.latitude != null && telemetry.longitude != null &&
-            telemetry.accuracyMeters?.let { it <= 25f } == true
+            telemetry.latitude in -90.0..90.0 && telemetry.longitude in -180.0..180.0 &&
+            telemetry.accuracyMeters?.let { it.isFinite() && it in 0f..25f } == true
     }
 
     private fun spokenDistance(meters: Double): String = if (meters >= 1_000) {

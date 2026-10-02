@@ -38,6 +38,10 @@ class MainActivityRenderTest {
     @Config(qualifiers = "w1280dp-h800dp-land-mdpi")
     fun realDashboardStartsAndDrawsInLandscape() = startAndDraw("cockpit-landscape.png")
 
+    @Test
+    @Config(qualifiers = "w851dp-h393dp-land-mdpi")
+    fun realDashboardFitsCompactLandscape() = startAndDraw("cockpit-compact-landscape.png")
+
     private fun startAndDraw(filename: String) {
         val controller = Robolectric.buildActivity(MainActivity::class.java)
         try {

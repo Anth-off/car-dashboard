@@ -42,4 +42,13 @@ data class NavigationState(
     val isSimulation: Boolean = false,
     /** Last position used by guidance; simulated only when [isSimulation] is true. */
     val currentPosition: GeoPoint? = null,
+    /** The maneuver after [nextStep], useful for closely spaced turns. */
+    val followingStep: RouteStep? = null,
+    val nextStepIndex: Int? = null,
+    /** Monotonic progress along the current route; resets when a new route is obtained. */
+    val progressFraction: Double = 0.0,
+    /** Guidance estimates must not be presented as live while this is true. */
+    val gpsPaused: Boolean = false,
+    /** A replacement route is being requested while the previous route remains available. */
+    val rerouting: Boolean = false,
 )

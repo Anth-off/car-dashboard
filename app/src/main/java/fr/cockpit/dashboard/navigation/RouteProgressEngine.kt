@@ -9,12 +9,13 @@ data class RouteProgress(
     val remainingSeconds: Long,
     val arrived: Boolean,
     val offRoute: Boolean,
+    val progressFraction: Double = 0.0,
 )
 
 /**
  * Projects fixes onto nearby route segments. A bounded forward window prevents a crossing or a
  * round trip ending near its start from skipping to a distant future segment or announcing arrival.
- * An off-route fix never advances progress; rerouting is an explicit action.
+ * An off-route fix never advances progress; the repository decides when to request a new route.
  */
 class RouteProgressEngine(private val route: Route) {
     private val offsets = cumulativeDistances(route.points)
@@ -22,12 +23,15 @@ class RouteProgressEngine(private val route: Route) {
     private var progressMeters = 0.0
     private var lastTimestamp: Long? = null
     private var badFixCount = 0
+    private var lastResult: RouteProgress? = null
 
     init {
         require(route.points.size >= 2 && route.steps.isNotEmpty() && geometryMeters > 0)
     }
 
     fun update(point: GeoPoint, accuracyMeters: Double, timestampMillis: Long): RouteProgress {
+        // Re-delivered or older fixes cannot confirm a departure or advance a maneuver twice.
+        if (lastTimestamp?.let { timestampMillis <= it } == true) return lastResult!!
         val elapsed = lastTimestamp?.let { ((timestampMillis - it) / 1000.0).coerceIn(0.0, 20.0) } ?: 0.0
         val forwardWindow = max(180.0, elapsed * 55.0)
         val lower = max(0.0, progressMeters - 35.0)
@@ -79,7 +83,8 @@ class RouteProgressEngine(private val route: Route) {
             remainingSeconds = seconds.roundToLong().coerceAtLeast(0),
             arrived = arrived,
             offRoute = badFixCount >= 3,
-        )
+            progressFraction = (progressMeters / geometryMeters).coerceIn(0.0, 1.0),
+        ).also { lastResult = it }
     }
 
     companion object {

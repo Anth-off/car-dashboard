@@ -6,6 +6,7 @@ data class Destination(
     val name: String,
     val latitude: Double,
     val longitude: Double,
+    val address: String = "",
 ) {
     init {
         require(id.isNotBlank()) { "La destination doit avoir un identifiant." }

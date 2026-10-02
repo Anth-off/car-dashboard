@@ -1,102 +1,263 @@
 package fr.cockpit.dashboard.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Navigation
-import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import fr.cockpit.dashboard.destinations.Destination
 import fr.cockpit.dashboard.destinations.DestinationRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import java.util.Locale
+import java.util.UUID
+
+private enum class DestinationTab { SEARCH, FAVORITES, RECENTS }
 
 @Composable
 fun DestinationsDialog(repository: DestinationRepository, saved: List<Destination>, onNavigate: (Destination) -> Unit, onDismiss: () -> Unit) {
+    val recents by repository.recents.collectAsState()
     var query by remember { mutableStateOf("") }
     var results by remember { mutableStateOf<List<Destination>>(emptyList()) }
+    var tab by remember { mutableStateOf(if (saved.isNotEmpty()) DestinationTab.FAVORITES else DestinationTab.SEARCH) }
     var loading by remember { mutableStateOf(false) }
+    var searched by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var manual by remember { mutableStateOf(false) }
-    var name by remember { mutableStateOf("") }
-    var latitude by remember { mutableStateOf("") }
-    var longitude by remember { mutableStateOf("") }
+    var clearHistory by remember { mutableStateOf(false) }
+    var searchJob by remember { mutableStateOf<Job?>(null) }
+    var searchGeneration by remember { mutableIntStateOf(0) }
     val scope = rememberCoroutineScope()
+    val keyboard = LocalSoftwareKeyboardController.current
 
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Votre prochaine destination") },
-        text = {
-            Column(Modifier.fillMaxWidth().heightIn(max = 500.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedTextField(query, onValueChange = { query = it }, label = { Text("Adresse ou lieu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                Button(onClick = {
-                    loading = true; error = null
-                    scope.launch {
-                        try {
-                            results = withTimeout(20_000) { repository.search(query) }
-                            if (results.isEmpty()) error = "Aucun résultat. Précisez la ville ou utilisez les coordonnées."
-                        } catch (cancelled: kotlinx.coroutines.TimeoutCancellationException) {
-                            error = "La recherche prend trop de temps. Réessayez ou utilisez les coordonnées."
-                        } catch (cancelled: CancellationException) {
-                            throw cancelled
-                        } catch (problem: Exception) {
-                            error = problem.message ?: "Recherche indisponible."
-                        } finally { loading = false }
-                    }
-                }, enabled = query.isNotBlank() && !loading) {
-                    if (loading) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    else Text("Rechercher")
-                }
-                error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                for (destination in results) {
-                    DestinationRow(destination, onNavigate, {
-                        repository.add(destination.name, destination.latitude, destination.longitude)
-                        results = results.filterNot { it.id == destination.id }
-                    }, favorite = false)
-                }
-                HorizontalDivider()
-                Text("Lieux enregistrés", color = Lime)
-                if (saved.isEmpty()) Text("Ajoutez vos adresses pour les retrouver aussi dans Android Auto.", color = Muted)
-                for (destination in saved) DestinationRow(destination, onNavigate, { repository.remove(destination.id) }, favorite = true)
-                TextButton(onClick = { manual = !manual }) { Text(if (manual) "Masquer les coordonnées" else "Ajouter avec des coordonnées GPS") }
-                if (manual) {
-                    OutlinedTextField(name, onValueChange = { name = it }, label = { Text("Nom du lieu") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(latitude, onValueChange = { latitude = it }, label = { Text("Latitude, ex. 48.8566") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), modifier = Modifier.fillMaxWidth())
-                    OutlinedTextField(longitude, onValueChange = { longitude = it }, label = { Text("Longitude, ex. 2.3522") }, singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), modifier = Modifier.fillMaxWidth())
-                    Button(onClick = {
-                        runCatching {
-                            repository.add(name, latitude.replace(',', '.').toDouble(), longitude.replace(',', '.').toDouble())
-                        }.onSuccess { name = ""; latitude = ""; longitude = ""; manual = false; error = null }
-                            .onFailure { error = "Vérifiez le nom, la latitude (−90 à 90) et la longitude (−180 à 180)." }
-                    }, enabled = name.isNotBlank() && latitude.isNotBlank() && longitude.isNotBlank()) { Text("Enregistrer") }
-                }
-                Text("Recherche fournie par le service de géocodage Android. Préparez vos destinations à l’arrêt.", color = Muted, style = MaterialTheme.typography.bodySmall)
+    fun updateQuery(value: String) {
+        searchGeneration++
+        searchJob?.cancel()
+        query = value
+        results = emptyList()
+        loading = false
+        searched = false
+        error = null
+        tab = DestinationTab.SEARCH
+    }
+    fun search() {
+        if (query.isBlank() || loading) return
+        keyboard?.hide()
+        searchJob?.cancel()
+        val generation = ++searchGeneration
+        val submittedQuery = query
+        loading = true
+        searched = true
+        error = null
+        results = emptyList()
+        tab = DestinationTab.SEARCH
+        searchJob = scope.launch {
+            try {
+                val found = withTimeout(20_000) { repository.search(submittedQuery) }
+                if (generation == searchGeneration) results = found
+            } catch (timeout: TimeoutCancellationException) {
+                if (generation == searchGeneration) error = "La recherche prend trop de temps. Réessayez ou utilisez les coordonnées GPS."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (problem: Exception) {
+                if (generation == searchGeneration) error = problem.message ?: "La recherche est indisponible. Réessayez."
+            } finally {
+                if (generation == searchGeneration) loading = false
             }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Fermer") } },
-    )
+        }
+    }
+
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(Modifier.padding(16.dp).widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight(.94f),
+            shape = RoundedCornerShape(28.dp), color = Ink, tonalElevation = 0.dp) {
+            Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(44.dp).background(Lime, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Explore, null, tint = Ink)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (manual) "Un point sur la carte" else "Où allons-nous ?", fontWeight = FontWeight.Bold,
+                            fontSize = 21.sp, color = Mist)
+                        Text(if (manual) "Ajouter des coordonnées GPS" else "Trouvez votre prochaine destination", style = MaterialTheme.typography.bodySmall, color = Muted)
+                    }
+                    IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, "Fermer les destinations", tint = Muted) }
+                }
+                if (manual) {
+                    ManualDestinationForm(Modifier.weight(1f), repository,
+                        onSaved = { manual = false; tab = DestinationTab.FAVORITES }, onNavigate = onNavigate)
+                    TextButton(onClick = { manual = false }) { Icon(Icons.Rounded.ArrowBack, null); Spacer(Modifier.width(8.dp)); Text("Retour aux destinations") }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(query, onValueChange = ::updateQuery, placeholder = { Text("Adresse, ville ou lieu…") },
+                            leadingIcon = { Icon(Icons.Rounded.Search, null) },
+                            trailingIcon = if (query.isNotEmpty()) {{ IconButton(onClick = { updateQuery("") }) { Icon(Icons.Rounded.Close, "Effacer la recherche") } }} else null,
+                            singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { search() }))
+                        FilledIconButton(onClick = ::search, enabled = query.isNotBlank() && !loading,
+                            modifier = Modifier.size(52.dp), shape = RoundedCornerShape(16.dp)) {
+                            Icon(Icons.Rounded.ArrowForward, "Rechercher")
+                        }
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        DestinationTab.entries.forEach { choice ->
+                            FilterChip(selected = tab == choice, onClick = { tab = choice },
+                                label = { Text(when (choice) {
+                                    DestinationTab.SEARCH -> "Recherche"
+                                    DestinationTab.FAVORITES -> "Favoris"
+                                    DestinationTab.RECENTS -> "Récents"
+                                }, fontSize = 12.sp) },
+                                leadingIcon = { Icon(when (choice) {
+                                    DestinationTab.SEARCH -> Icons.Rounded.Search
+                                    DestinationTab.FAVORITES -> Icons.Rounded.StarOutline
+                                    DestinationTab.RECENTS -> Icons.Rounded.History
+                                }, null, Modifier.size(16.dp)) })
+                        }
+                    }
+                    Box(Modifier.weight(1f).fillMaxWidth()) {
+                        when {
+                            tab == DestinationTab.SEARCH && loading -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                CircularProgressIndicator(color = Lime, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
+                                Text("Recherche de votre destination…", color = Muted, style = MaterialTheme.typography.bodyMedium)
+                            }
+                            tab == DestinationTab.SEARCH && error != null -> DestinationEmptyState(Icons.Rounded.WifiOff,
+                                "Recherche indisponible", error.orEmpty(), "Réessayer", ::search)
+                            tab == DestinationTab.SEARCH && results.isEmpty() -> DestinationEmptyState(Icons.Rounded.TravelExplore,
+                                if (searched) "Aucun lieu trouvé" else "La route commence ici",
+                                if (searched) "Ajoutez la ville ou le code postal à votre recherche. Vous pouvez aussi utiliser des coordonnées GPS."
+                                else "Recherchez une adresse, un restaurant ou une ville. Touchez un lieu pour lancer le guidage, ou son étoile pour le garder.")
+                            tab == DestinationTab.FAVORITES && saved.isEmpty() -> DestinationEmptyState(Icons.Rounded.StarOutline,
+                                "Vos adresses à portée de main", "Enregistrez un résultat avec son étoile. Vos favoris sont aussi disponibles dans Android Auto.",
+                                "Rechercher un lieu", { tab = DestinationTab.SEARCH })
+                            tab == DestinationTab.RECENTS && recents.isEmpty() -> DestinationEmptyState(Icons.Rounded.History,
+                                "Votre prochain trajet vous attend", "Les 12 dernières destinations de vos guidages seront conservées ici, sur ce téléphone.")
+                            else -> {
+                                val destinations = when (tab) {
+                                    DestinationTab.SEARCH -> results
+                                    DestinationTab.FAVORITES -> saved
+                                    DestinationTab.RECENTS -> recents
+                                }
+                                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    item {
+                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                                            Text(when (tab) {
+                                                DestinationTab.SEARCH -> "${destinations.size} lieu${if (destinations.size > 1) "x" else ""} trouvé${if (destinations.size > 1) "s" else ""}"
+                                                DestinationTab.FAVORITES -> "Vos lieux enregistrés · ${destinations.size}"
+                                                DestinationTab.RECENTS -> "Derniers guidages"
+                                            }, color = Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+                                            if (tab == DestinationTab.RECENTS) TextButton(onClick = { clearHistory = true }) { Text("Effacer") }
+                                        }
+                                    }
+                                    items(destinations, key = { it.id }) { destination ->
+                                        DestinationRow(destination, onNavigate,
+                                            onFavorite = { repository.toggleFavorite(destination) }, favorite = repository.isFavorite(destination))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    HorizontalDivider(color = SurfaceRaised)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { manual = true }) {
+                            Icon(Icons.Rounded.MyLocation, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Coordonnées GPS")
+                        }
+                        Text("À préparer\nà l’arrêt", color = Muted, style = MaterialTheme.typography.labelSmall)
+                    }
+                }
+            }
+        }
+    }
+    if (clearHistory) AlertDialog(onDismissRequest = { clearHistory = false }, title = { Text("Effacer les trajets récents ?") },
+        text = { Text("Vos favoris seront conservés.") },
+        confirmButton = { TextButton(onClick = { repository.clearRecents(); clearHistory = false }) { Text("Effacer") } },
+        dismissButton = { TextButton(onClick = { clearHistory = false }) { Text("Annuler") } })
 }
 
 @Composable
-private fun DestinationRow(destination: Destination, onNavigate: (Destination) -> Unit, onAction: () -> Unit, favorite: Boolean) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = { onNavigate(destination) }, modifier = Modifier.weight(1f)) {
-            Icon(Icons.Rounded.Navigation, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(destination.name, modifier = Modifier.weight(1f))
+private fun DestinationRow(destination: Destination, onNavigate: (Destination) -> Unit, onFavorite: () -> Unit, favorite: Boolean) {
+    Surface(shape = RoundedCornerShape(18.dp), color = Surface) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).clickable { onNavigate(destination) }.padding(start = 14.dp, top = 16.dp, bottom = 16.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).background(SurfaceRaised, CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(Icons.Rounded.NearMe, null, tint = Lime, modifier = Modifier.size(19.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(destination.name, fontWeight = FontWeight.SemiBold, color = Mist, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(destination.address.ifBlank { String.format(Locale.FRANCE, "%.4f°, %.4f°", destination.latitude, destination.longitude) },
+                        color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
+            }
+            IconButton(onClick = onFavorite, modifier = Modifier.padding(horizontal = 4.dp)) {
+                Icon(if (favorite) Icons.Rounded.Star else Icons.Rounded.StarOutline,
+                    if (favorite) "Retirer ${destination.name} des favoris" else "Enregistrer ${destination.name} en favori", tint = if (favorite) Lime else Muted)
+            }
         }
-        IconButton(onClick = onAction) {
-            Icon(if (favorite) Icons.Rounded.DeleteOutline else Icons.Rounded.StarOutline,
-                if (favorite) "Supprimer le favori" else "Enregistrer le favori")
-        }
+    }
+}
+
+@Composable
+private fun BoxScope.DestinationEmptyState(icon: ImageVector, title: String, message: String, action: String? = null, onAction: () -> Unit = {}) {
+    Column(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Box(Modifier.size(70.dp).background(Surface, CircleShape), contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(30.dp), tint = Lime) }
+        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Text(message, color = Muted, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (action != null) TextButton(onClick = onAction) { Text(action) }
+    }
+}
+
+@Composable
+private fun ManualDestinationForm(modifier: Modifier, repository: DestinationRepository, onSaved: () -> Unit, onNavigate: (Destination) -> Unit) {
+    var name by remember { mutableStateOf("") }
+    var latitude by remember { mutableStateOf("") }
+    var longitude by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    val ready = latitude.isNotBlank() && longitude.isNotBlank()
+    fun destination(): Destination? = runCatching {
+        Destination(UUID.randomUUID().toString(), name.trim().ifEmpty { "Point GPS" },
+            latitude.trim().replace(',', '.').toDouble(), longitude.trim().replace(',', '.').toDouble())
+    }.onFailure { error = "Vérifiez la latitude (−90 à 90) et la longitude (−180 à 180)." }.getOrNull()
+    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        item { Text("Un point précis, même sans recherche d’adresse. Les virgules et les points décimaux sont acceptés.", color = Muted, style = MaterialTheme.typography.bodyMedium) }
+        item { OutlinedTextField(name, onValueChange = { name = it }, label = { Text("Nom du lieu (facultatif)") }, singleLine = true,
+            shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(latitude, onValueChange = { latitude = it; error = null }, label = { Text("Latitude") }, placeholder = { Text("48.8566") },
+            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
+        item { OutlinedTextField(longitude, onValueChange = { longitude = it; error = null }, label = { Text("Longitude") }, placeholder = { Text("2.3522") },
+            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
+        error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
+        item { Button(onClick = { destination()?.let(onNavigate) }, enabled = ready, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
+            Icon(Icons.Rounded.Navigation, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Y aller")
+        } }
+        item { OutlinedButton(onClick = { destination()?.let { repository.addFavorite(it); onSaved() } }, enabled = ready,
+            modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
+            Icon(Icons.Rounded.StarOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Enregistrer en favori")
+        } }
     }
 }

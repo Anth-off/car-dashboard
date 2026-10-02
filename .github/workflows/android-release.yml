@@ -6,7 +6,7 @@ on:
       version:
         description: Release tag
         required: true
-        default: v0.1.0
+        default: v0.2.0
         type: string
 
 permissions:
@@ -42,8 +42,8 @@ jobs:
       - name: Prepare downloads
         run: |
           mkdir release-artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/cockpit-0.1-debug.apk
-          cp app/build/outputs/bundle/debug/app-debug.aab release-artifacts/cockpit-0.1-debug.aab
+          cp app/build/outputs/apk/debug/app-debug.apk "release-artifacts/cockpit-${RELEASE_TAG#v}-debug.apk"
+          cp app/build/outputs/bundle/debug/app-debug.aab "release-artifacts/cockpit-${RELEASE_TAG#v}-debug.aab"
           git archive --format=zip --prefix=cockpit/ --output=release-artifacts/cockpit-sources.zip HEAD
           cd release-artifacts
           sha256sum *.apk *.aab *.zip > SHA256SUMS.txt
@@ -52,9 +52,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > release-notes.md <<'EOF'
-          Prototype Android Cockpit : navigation et carte propres à l’application, commandes Apple Music, vitesse GPS, distances totale et trajet, météo extérieure.
+          Cockpit : une carte plus grande et une navigation enrichie.
 
-          APK et AAB de débogage compilés après les 17 tests JVM/Robolectric et Android Lint. Les essais sur autoradio et avec une session Apple Music réelle restent à effectuer.
+          - Carte prioritaire dans le dashboard, mode plein écran sur téléphone, déplacement au doigt, zoom/pincement, recentrage, orientation et vue d’ensemble.
+          - Carte jour/nuit, destination visible, itinéraire parcouru atténué, échelle et précision GPS.
+          - Heure d’arrivée estimée hors trafic, prochaine manœuvre et suivante, liste des étapes, commande vocale directe, recalcul automatique après sortie confirmée.
+          - Recherche d’adresses améliorée, favoris et 12 destinations récentes locales.
+          - Android Auto : carte manipulable et options de guidage adaptées aux modèles du véhicule.
+
+          APK et AAB de débogage compilés après les tests JVM/Robolectric et Android Lint. Les essais sur autoradio et avec une session Apple Music réelle restent à effectuer.
 
           L’APK permet les essais sur téléphone. Pour Android Auto, utiliser un canal de test Google Play compatible avec la Car App Library ; une installation directe ne suffit pas.
 

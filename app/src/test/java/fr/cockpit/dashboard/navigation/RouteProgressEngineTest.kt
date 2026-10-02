@@ -55,4 +55,25 @@ class RouteProgressEngineTest {
         assertFalse(jumped.arrived)
         assertEquals(initial.remainingMeters, jumped.remainingMeters, 0.1)
     }
+
+    @Test fun `duplicate and older fixes cannot confirm off route`() {
+        val points = listOf(GeoPoint(48.0, 2.0), GeoPoint(48.001, 2.0), GeoPoint(48.002, 2.0))
+        val engine = RouteProgressEngine(route(points, listOf(0, 1, 2)))
+        engine.update(points.first(), 3.0, 1_000)
+        val farAway = GeoPoint(49.0, 3.0)
+        engine.update(farAway, 3.0, 2_000)
+        repeat(5) { assertFalse(engine.update(farAway, 3.0, 2_000).offRoute) }
+        assertFalse(engine.update(farAway, 3.0, 1_500).offRoute)
+        assertFalse(engine.update(farAway, 3.0, 3_000).offRoute)
+        assertTrue(engine.update(farAway, 3.0, 4_000).offRoute)
+    }
+
+    @Test fun `progress fraction follows physical route and does not advance off route`() {
+        val points = listOf(GeoPoint(48.0, 2.0), GeoPoint(48.001, 2.0), GeoPoint(48.002, 2.0))
+        val engine = RouteProgressEngine(route(points, listOf(0, 1, 2)))
+        assertEquals(0.0, engine.update(points[0], 3.0, 1_000).progressFraction, 0.001)
+        assertEquals(0.5, engine.update(points[1], 3.0, 11_000).progressFraction, 0.001)
+        assertEquals(0.5, engine.update(GeoPoint(49.0, 3.0), 3.0, 12_000).progressFraction, 0.001)
+        assertEquals(1.0, engine.update(points[2], 3.0, 21_000).progressFraction, 0.001)
+    }
 }

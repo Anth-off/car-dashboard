@@ -25,10 +25,17 @@ internal fun carTravelEstimate(meters: Double, seconds: Long): TravelEstimate {
 }
 
 internal fun carStep(state: NavigationState): Step {
-    val next = state.nextStep
-    val step = Step.Builder(state.instruction.ifBlank { "Suivez l’itinéraire" })
-        .setManeuver(Maneuver.Builder(maneuverType(next, state.arrived)).build())
-    next?.roadName?.takeIf { it.isNotBlank() }?.let { step.setRoad(it) }
+    return carRouteStep(state.nextStep, state.instruction, state.arrived)
+}
+
+internal fun carRouteStep(
+    routeStep: RouteStep?,
+    instruction: String = routeStep?.instruction.orEmpty(),
+    arrived: Boolean = false,
+): Step {
+    val step = Step.Builder(instruction.ifBlank { "Suivez l’itinéraire" })
+        .setManeuver(Maneuver.Builder(maneuverType(routeStep, arrived)).build())
+    routeStep?.roadName?.takeIf { it.isNotBlank() }?.let { step.setRoad(it) }
     return step.build()
 }
 
@@ -36,7 +43,7 @@ internal fun carStep(state: NavigationState): Step {
 internal fun secondsToStep(state: NavigationState): Long {
     val distance = state.distanceToTurnMeters ?: return 0L
     val steps = state.route?.steps.orEmpty()
-    val index = steps.indexOf(state.nextStep)
+    val index = state.nextStepIndex ?: steps.indexOf(state.nextStep)
     val leg = steps.getOrNull(index - 1)
     if (leg != null && leg.distanceMeters > 0.0) {
         return (leg.durationSeconds * (distance / leg.distanceMeters).coerceIn(0.0, 1.0))

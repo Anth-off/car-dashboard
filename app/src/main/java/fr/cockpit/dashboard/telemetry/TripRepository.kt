@@ -38,7 +38,7 @@ class TripRepository private constructor(context: Context) {
                 synchronized(lock) {
                     val last = lastAcceptedElapsedMillis
                     if (last != null && SystemClock.elapsedRealtime() - last > STALE_AFTER_MS) {
-                        mutableState.value = mutableState.value.copy(speedKmh = null)
+                        mutableState.value = mutableState.value.copy(speedKmh = null, bearingDegrees = null)
                         accumulator.reset()
                         lastAcceptedElapsedMillis = null
                     }
@@ -81,13 +81,13 @@ class TripRepository private constructor(context: Context) {
     internal fun onTrackingStarted() = synchronized(lock) {
         accumulator.reset()
         lastAcceptedElapsedMillis = null
-        mutableState.value = mutableState.value.copy(recording = true, speedKmh = null, error = null)
+        mutableState.value = mutableState.value.copy(recording = true, speedKmh = null, bearingDegrees = null, error = null)
     }
 
     internal fun onTrackingStopped() = synchronized(lock) {
         accumulator.reset()
         lastAcceptedElapsedMillis = null
-        mutableState.value = mutableState.value.copy(recording = false, speedKmh = null)
+        mutableState.value = mutableState.value.copy(recording = false, speedKmh = null, bearingDegrees = null)
         persist()
     }
 
@@ -99,7 +99,7 @@ class TripRepository private constructor(context: Context) {
     internal fun onProviderUnavailable() = synchronized(lock) {
         accumulator.reset()
         lastAcceptedElapsedMillis = null
-        mutableState.value = mutableState.value.copy(speedKmh = null, error = "GPS désactivé. Active la localisation du téléphone.")
+        mutableState.value = mutableState.value.copy(speedKmh = null, bearingDegrees = null, error = "GPS désactivé. Active la localisation du téléphone.")
     }
 
     internal fun accept(location: Location) = synchronized(lock) {
@@ -120,6 +120,10 @@ class TripRepository private constructor(context: Context) {
         val previous = mutableState.value
         mutableState.value = previous.copy(
             speedKmh = sample.speedMetersPerSecond?.times(3.6f),
+            bearingDegrees = location.bearing.takeIf {
+                location.hasBearing() && it.isFinite() && (sample.speedMetersPerSecond ?: 0f) > 1f &&
+                    (!location.hasBearingAccuracy() || location.bearingAccuracyDegrees <= 45f)
+            },
             totalMeters = previous.totalMeters + sample.distanceMeters,
             tripMeters = previous.tripMeters + sample.distanceMeters,
             latitude = sample.fix.latitude,

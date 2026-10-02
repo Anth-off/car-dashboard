@@ -1,14 +1,22 @@
-Cockpit 0.1 — vérification
+Cockpit 0.2.0 — vérification du 2 octobre 2026
 
 Compilation APK et AAB : réussie.
-Signature APK debug : vérifiée.
-Android Lint : aucune erreur bloquante.
-17 tests réussis : 7 compteurs GPS, 4 progression navigation, 4 modèles Android Auto, 2 lancement/rendu Activity.
+Signature APK debug : vérifiée (APK Signature Scheme v2).
+Android Lint : aucune erreur ; avertissements non bloquants.
+43 tests réussis :
+- 7 compteurs GPS
+- 6 progression navigation
+- 7 politique de recalcul automatique
+- 6 projection, cadrage et zoom cartographiques
+- 7 persistance, déduplication et recherche de destinations
+- 5 modèles Android Auto et zones de carte
+- 3 lancement/rendu Activity (portrait, paysage, paysage compact 851 x 393 dp)
+- 2 interactions navigation (plein écran/recherche, voix/arrêt et commandes en paysage compact)
 
-Les aperçus portrait/paysage proviennent du véritable écran Compose au repos, dessiné par le moteur graphique Android natif de Robolectric. Aucun trajet ni relevé fictif.
+Les aperçus portrait/paysage proviennent du véritable écran Compose au repos, dessiné par le moteur graphique Android natif de Robolectric. Aucun trajet ni relevé fictif. En l’absence de position GPS, la carte affiche son état d’attente.
 
-Émulateur Android 35 : APK installé et Activity lancée sans exception fatale observée. La capture matérielle n’a pas été validée, le moteur d’affichage de cet environnement produisant un écran noir.
+Les coordonnées, les capteurs et la disponibilité des services en ligne ne sont pas simulés dans l’application. Les tests unitaires utilisent des données isolées pour vérifier les calculs et les interactions.
 
 À vérifier avec le matériel de l’utilisateur : projection Android Auto réelle, session Apple Music, réception GPS et guidage sur route. Pour l’autoradio, installer via un canal de confiance Google Play ; l’APK direct ne suffit pas pour la Car App Library.
 
-Les services publics de cartographie/calcul n’offrent pas de garantie de disponibilité. La navigation est en ligne, sans trafic en direct.
+Les services publics de cartographie/calcul n’offrent pas de garantie de disponibilité. La navigation est en ligne, sans trafic en direct, cartes hors ligne téléchargeables, limites de vitesse ou signalements routiers.
