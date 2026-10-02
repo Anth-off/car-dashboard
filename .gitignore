@@ -10,3 +10,4 @@ local.properties
 artifacts/*.apk
 artifacts/*.aab
 artifacts/*.zip
+artifacts/SHA256SUMS.txt

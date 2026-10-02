@@ -65,6 +65,8 @@ Fichiers produits :
 
 La signature debug est réservée aux essais. Une distribution publique nécessite votre configuration de signature, votre identifiant d’application et la validation de toutes les exigences Android Auto. Le projet ne contient aucune clé privée, aucun jeton et aucune clé API de fournisseur.
 
+Le workflow GitHub Actions **Android test release**, lançable manuellement, compile les paquets, exécute les tests et publie une préversion avec ses sommes SHA-256. Il refuse de remplacer une version déjà publiée. Sa signature de débogage peut différer d’un APK compilé localement.
+
 ## Données, fournisseurs et limites
 
 - Les compteurs et les favoris sont stockés uniquement dans les préférences locales. Aucune trace GPS n’est conservée ; la sauvegarde cloud Android est désactivée.
