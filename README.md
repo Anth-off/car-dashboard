@@ -8,7 +8,7 @@ La clé de signature de la version 0.2 n’a pas été sauvegardée par son anci
 
 [Page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
 
-La publication prévoit `cockpit-0.3.0.apk` pour le téléphone et `cockpit-0.3.0.aab` pour un canal de test Google Play. Les téléchargements deviennent disponibles après la réussite du workflow de publication.
+La version de test 0.3.0 est publiée : [télécharger l’APK pour le téléphone](https://github.com/Anth-off/car-dashboard/releases/download/v0.3.0/cockpit-0.3.0.apk). La page de distribution fournit également le bundle `cockpit-0.3.0.aab`, les sources et les sommes de contrôle SHA-256.
 
 ![Dashboard sans défilement sur téléphone, au repos](artifacts/cockpit-landscape.png)
 

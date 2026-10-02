@@ -2,6 +2,10 @@ Cockpit GPS 0.3.0 — vérification du 2 octobre 2026
 
 INSTALLATION : nouvelle application Cockpit GPS (fr.cockpit.gps), versionCode 3. Elle s’installe à côté de Cockpit 0.2.0 (fr.cockpit.dashboard), sans désinstallation. La clé privée de la 0.2.0 a été perdue ; aucune mise à jour directe ni migration des compteurs/favoris vers Cockpit GPS n’est effectuée. La nouvelle clé de publication est conservée dans un dossier privé hors dépôt et une archive privée remise au propriétaire doit être sauvegardée hors de cet espace de travail.
 
+Publication GitHub v0.3.0 réussie, commit source 16aea40c703597e34929a2f7457e849260663fdd.
+Contrôles CI : run 36996727799 réussi ; publication : run 36997045759 réussi.
+APK téléchargé depuis le lien public et signature vérifiée ; SHA-256 d1900340bfbbcac8789e02a96732f5c831e73db1d9242d9da487a2daaffaa677.
+
 Compilation des APK et AAB release signés : réussie.
 APK non débogable : fr.cockpit.gps, versionName 0.3.0, versionCode 3, libellé Cockpit GPS.
 Android Lint release : aucune erreur ; avertissements non bloquants.
@@ -28,5 +32,7 @@ Signature : APK et AAB release acceptés avec le même certificat SHA-256 éping
 Routage public vérifié entre points proches des centres de Sainville et Dourdan : deux serveurs OSRM automobiles retournent D5/D17 17,54 km / 23 min et D17/D838 18,46 km / 25,3 min. Points approximatifs, sans adresses domicile/travail ni trafic réel. Le choix est le plus rapide parmi les alternatives reçues, pas une garantie sur toutes les routes.
 
 Les images montrent le véritable écran Compose au repos via le moteur graphique natif Robolectric. Pas de trajet ou données GPS fictives dans l'application. Le fond de carte attend la position GPS au démarrage.
+
+Émulateur Android 15/API 35 x86_64 sans accélération : APK final 0.3.0 installé avec succès, lancement de l’Activity réussi et aucune exception AndroidRuntime fatale observée pendant ce contrôle court. Coexistence des packages fr.cockpit.gps et fr.cockpit.dashboard confirmée. L’ancien package de cet AVD était une 0.1.0 ; la coexistence avec l’APK exact 0.2.0 n’a pas été testée, car son installation par-dessus cette 0.1.0 a été refusée pour signature différente. Aucun effacement ni désinstallation. La réinstallation du même APK 0.3.0 a dépassé la borne de 20 secondes de cet essai logiciel, sans résultat : elle n’est pas déclarée vérifiée.
 
 Restent à vérifier sur matériel : capteurs/GPS routiers, Android Auto réel, session Apple Music réelle. L'affichage et la navigation dépendent des fournisseurs publics et de la connectivité. Pas de trafic, fermetures routières ou cartes hors ligne.

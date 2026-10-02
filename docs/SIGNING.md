@@ -4,7 +4,7 @@ Depuis la version 0.3.0, l’application utilise le nom **Cockpit GPS** et l’i
 
 Il s’agit d’une nouvelle installation, pas d’une mise à jour de la 0.2. Les compteurs démarrent à zéro, les favoris doivent être recréés et les autorisations doivent être accordées à Cockpit GPS. Aucune migration automatique des données n’est effectuée.
 
-La [page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) est la destination prévue pour **`cockpit-0.3.0.apk`** et **`cockpit-0.3.0.aab`**, tous deux signés en variante `release`. Leur disponibilité dépend de la réussite du workflow de publication.
+La [page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) fournit **`cockpit-0.3.0.apk`** et **`cockpit-0.3.0.aab`**, tous deux signés en variante `release` et publiés après réussite des contrôles.
 
 ## Pourquoi la version 0.2 ne peut pas être remplacée
 
