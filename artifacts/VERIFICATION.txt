@@ -1,0 +1,14 @@
+Cockpit 0.1 — vérification
+
+Compilation APK et AAB : réussie.
+Signature APK debug : vérifiée.
+Android Lint : aucune erreur bloquante.
+17 tests réussis : 7 compteurs GPS, 4 progression navigation, 4 modèles Android Auto, 2 lancement/rendu Activity.
+
+Les aperçus portrait/paysage proviennent du véritable écran Compose au repos, dessiné par le moteur graphique Android natif de Robolectric. Aucun trajet ni relevé fictif.
+
+Émulateur Android 35 : APK installé et Activity lancée sans exception fatale observée. La capture matérielle n’a pas été validée, le moteur d’affichage de cet environnement produisant un écran noir.
+
+À vérifier avec le matériel de l’utilisateur : projection Android Auto réelle, session Apple Music, réception GPS et guidage sur route. Pour l’autoradio, installer via un canal de confiance Google Play ; l’APK direct ne suffit pas pour la Car App Library.
+
+Les services publics de cartographie/calcul n’offrent pas de garantie de disponibilité. La navigation est en ligne, sans trafic en direct.
