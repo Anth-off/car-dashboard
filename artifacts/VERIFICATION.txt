@@ -7,8 +7,15 @@ Le propriétaire a précisé qu’Android ne redemande pas les autorisations : i
 - Une déconnexion du listener musical nettoie la session et demande une reconnexion seulement si Android accorde encore l’accès. Une requête par interruption, réarmée à la reconnexion effective. Aucun accès n’est retiré/réaccordé, et le lancement normal ne force pas une reconnexion du listener.
 - La carte et le pied de navigation distinguent suivi arrêté et signal GPS attendu. Le message d’activation ne réapparaît plus pendant un suivi déjà actif. Le démarrage GPS reste explicite depuis le téléphone ; aucun démarrage automatique en arrière-plan n’est ajouté.
 
+GUIDAGE VOCAL
+Le correctif remplace les quatre phases d’annonce de chaque étape et l’usage de QUEUE_FLUSH par une préparation puis une action pour les manœuvres utiles. La préparation anticipe environ 18 secondes, bornée à 300–650 mètres, et l’action environ 3 secondes, bornée à 35–100 mètres. Les simples changements de nom et maintiens tout droit restent affichés sans être lus ; les changements de direction et les bifurcations utiles sont conservés.
+
+La politique mémorise seulement les annonces réellement soumises au moteur. Une perte GPS ne réinitialise pas les jalons d’une manœuvre ; les alertes répétées GPS/hors-route sont espacées. Un recalcul automatique garde la cadence, tout en remplaçant les anciennes consignes.
+
+La lecture normale conserve une phrase en cours et au plus une suivante, remplaçable. Le passage d’un virage, la perte du GPS, l’expiration ou le changement de trajet invalident les anciennes consignes en attente. L’adaptateur TTS emploie QUEUE_ADD et ne soumet la suivante qu’à la fin de l’actuelle. Les callbacks sont traités sur le thread principal et vérifiés par identifiant. Arrêt, voix coupée, arrivée et changement effectif de route peuvent arrêter une ancienne consigne devenue caduque. Une erreur moteur ou un refus de focus ne bloque pas les annonces suivantes.
+
 VALIDATION LOCALE
-99 tests JVM/Robolectric réussis, zéro échec, zéro erreur et zéro ignoré. Les 7 tests ajoutés couvrent :
+116 tests JVM/Robolectric réussis, zéro échec, zéro erreur et zéro ignoré. Les 7 tests de reprise et d’accès ajoutés couvrent :
 - ouverture/réouverture et démarrage avec permissions déjà accordées, sans nouvelle demande ;
 - refus de notifications non redemandé sur un autre trajet ou après réouverture ;
 - localisation absente demandée seulement au démarrage explicite ;
@@ -16,6 +23,8 @@ VALIDATION LOCALE
 - accès musical retiré : pas de tentative de reconnexion ;
 - reconnexion : morceau retrouvé sans basculer l’accès et sans doubler les callbacks ;
 - transition suivi arrêté → attente GPS → position → position périmée, sans invitation à réactiver et sans défilement.
+
+Les 17 tests vocaux ajoutés couvrent les deux jalons par manœuvre, la cadence et les virages rapprochés, les changements de vitesse, les reprises GPS, les recalculs, l’arrivée, les files remplacées ou périmées, les callbacks anciens, les refus de focus et erreurs moteur, ainsi que l’adaptateur Android TTS utilisant QUEUE_ADD. Les deux tests adaptateur Robolectric vérifient la lecture suivante seulement après la fin de la première et le silence après désactivation avant initialisation du moteur. Aucun test audio réel dans la voiture n’est revendiqué.
 
 APK et AAB release compilés ; Android Lint release sans erreur. Signatures APK/AAB vérifiées avec le même certificat que la 0.3/0.4 :
 83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30

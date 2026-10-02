@@ -8,7 +8,7 @@ Depuis la version **0.4.0**, Cockpit GPS reprend le dashboard du téléphone sur
 
 [Page de distribution 0.4.1](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.1) · [Version 0.4.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
 
-Version de test **0.4.1** : [télécharger l’APK](https://github.com/Anth-off/car-dashboard/releases/download/v0.4.1/cockpit-0.4.1.apk). La page de distribution regroupe également le bundle signé `cockpit-0.4.1.aab`, les sources et les sommes de contrôle SHA-256. Ce correctif améliore la reprise des accès déjà accordés et distingue le suivi GPS actif de l’attente d’une position ; son comportement après mise à jour sur le S23 reste à confirmer.
+Version de test **0.4.1** : [télécharger l’APK](https://github.com/Anth-off/car-dashboard/releases/download/v0.4.1/cockpit-0.4.1.apk). La page de distribution regroupe également le bundle signé `cockpit-0.4.1.aab`, les sources et les sommes de contrôle SHA-256. Ce correctif réduit les annonces GPS et leurs interruptions, améliore la reconnexion musicale avec les accès déjà accordés et distingue le suivi actif de l’attente d’une position ; son comportement après mise à jour sur le S23 reste à confirmer.
 
 ![Dashboard sans défilement sur téléphone, au repos](artifacts/cockpit-landscape.png)
 
@@ -25,7 +25,7 @@ Le téléphone et Android Auto réutilisent les mêmes composants Compose `Dashb
 - Jusqu’à trois itinéraires automobiles OSRM réellement proposés, classés par durée estimée puis distance. Noms des routes, comparaison des durées et choix explicite sur téléphone ou Android Auto.
 - Instructions françaises, prochaine manœuvre, étapes par pages, progression et arrivée estimée **hors trafic**. Direction GPS utilisée en mouvement pour mieux choisir le sens de circulation.
 - Départ raccordé à moins de 100 m et arrivée à moins de 200 m d’une route ; message si le point demandé est éloigné de l’accès routier. Une alternative devenue ancienne est recalculée depuis la position courante.
-- Guidage vocal activable directement dans le bandeau de navigation ; écran maintenu allumé pendant un guidage actif.
+- Guidage vocal limité aux manœuvres utiles : préparation puis action, sans couper la phrase en cours ni accumuler les anciennes annonces. La voix reste activable depuis le bandeau ; écran maintenu allumé pendant un guidage actif.
 - Recherche d’adresse, favoris locaux et 12 destinations récentes par pages courtes ; coordonnées manuelles en étapes avec clavier visible. Réglages présentés une section par page.
 - Recalcul automatique après trois positions confirmant la sortie d’itinéraire ; ancien trajet conservé si le réseau échoue et délais progressifs entre tentatives. Recalcul manuel disponible.
 - Lecture/pause, précédent/suivant et métadonnées de la session Apple Music active.

@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
-import kotlin.math.roundToInt
 
 /**
  * User-started online navigation. The caller explains the public routing service and coordinate
@@ -24,7 +23,10 @@ class NavigationRepository private constructor(context: Context) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val trips = TripRepository.get(applicationContext)
     private val router = OsrmRoutingClient()
-    private val voice = NavigationVoice(applicationContext)
+    private val speechPolicy = GuidanceSpeechPolicy()
+    private val voice = NavigationVoice(applicationContext) { announcement ->
+        speechPolicy.onSpoken(announcement, SystemClock.elapsedRealtime())
+    }
     private val preferences = applicationContext.getSharedPreferences("navigation_preferences", Context.MODE_PRIVATE)
     private val mutableState = MutableStateFlow(NavigationState(voiceEnabled = preferences.getBoolean("voice_enabled", true)))
     val state: StateFlow<NavigationState> = mutableState.asStateFlow()
@@ -34,7 +36,6 @@ class NavigationRepository private constructor(context: Context) {
     private var routeOptionsOrigin: GeoPoint? = null
     private val reroutePolicy = AutomaticReroutePolicy()
     private var progress: RouteProgressEngine? = null
-    private var lastSpeechKey: String? = null
     private var lastConsumedFixTime: Long? = null
     private var simulationEnabled = false
     private var simulationDistance = 0.0
@@ -95,7 +96,8 @@ class NavigationRepository private constructor(context: Context) {
                 ensureActive()
                 routeOptionsOrigin = origin
                 activateRoute(destination, choices.routes, 0, choices.warning,
-                    if (selectionRefresh) "Trajets actualisés depuis ta position : choisis à nouveau." else null)
+                    if (selectionRefresh) "Trajets actualisés depuis ta position : choisis à nouveau." else null,
+                    keepSpeechCadence = automatic)
                 DestinationRepository.get(applicationContext).recordVisit(destination)
                 reroutePolicy.requestFinished(success = true, SystemClock.elapsedRealtime())
                 if (simulationEnabled) simulateNextFix() else updateTelemetry(trips.state.value)
@@ -142,16 +144,18 @@ class NavigationRepository private constructor(context: Context) {
             requestRoute(destination, automatic = false, selectionRefresh = true)
             return false
         }
-        voice.stop()
         activateRoute(destination, current.routeOptions, index, current.routeWarning)
         if (simulationEnabled) simulateNextFix() else updateTelemetry(telemetry)
         return true
     }
 
-    private fun activateRoute(destination: Destination, choices: List<Route>, index: Int, warning: String?, notice: String? = null) {
+    private fun activateRoute(destination: Destination, choices: List<Route>, index: Int, warning: String?, notice: String? = null,
+                              keepSpeechCadence: Boolean = false) {
         val route = choices[index]
+        // Even an automatic recalculation replaces the maneuver identities and invalidates speech.
+        voice.stop()
+        speechPolicy.reset(keepCadence = keepSpeechCadence)
         progress = RouteProgressEngine(route)
-        lastSpeechKey = null
         lastConsumedFixTime = null
         simulationDistance = 0.0
         mutableState.value = NavigationState(
@@ -173,7 +177,7 @@ class NavigationRepository private constructor(context: Context) {
             requestedDestination = null
             routeOptionsOrigin = null
             lastConsumedFixTime = null
-            lastSpeechKey = null
+            speechPolicy.reset()
             simulationEnabled = false
             mutableState.value = NavigationState(voiceEnabled = state.value.voiceEnabled)
         }
@@ -181,10 +185,11 @@ class NavigationRepository private constructor(context: Context) {
 
     fun setVoiceEnabled(enabled: Boolean) {
         scope.launch {
+            if (state.value.voiceEnabled == enabled) return@launch
             preferences.edit().putBoolean("voice_enabled", enabled).apply()
             mutableState.value = mutableState.value.copy(voiceEnabled = enabled)
             if (!enabled) voice.stop()
-            lastSpeechKey = null
+            speechPolicy.reset()
         }
     }
 
@@ -196,14 +201,14 @@ class NavigationRepository private constructor(context: Context) {
             simulationEnabled = enabled
             simulationDistance = 0.0
             lastConsumedFixTime = null
-            lastSpeechKey = null
+            voice.stop()
+            speechPolicy.reset()
             if (!enabled) {
                 // Simulated progress cannot be reused with a physical GPS fix. Require a new route
                 // from the current real position instead of silently resetting an active route.
                 request?.cancel()
                 requestGeneration++
                 reroutePolicy.reset()
-                voice.stop()
                 progress = null
                 mutableState.value = NavigationState(
                     destination = state.value.destination,
@@ -225,19 +230,17 @@ class NavigationRepository private constructor(context: Context) {
                 distanceToTurnMeters = null, remainingMeters = null, remainingSeconds = null,
                 nextStep = null, followingStep = null, gpsPaused = true,
             )
-            if (lastSpeechKey != "gps-lost") {
-                announce("Signal GPS perdu. Le guidage est en pause.")
-                lastSpeechKey = "gps-lost"
-            }
+            voice.setContext("gps-lost")
+            if (state.value.voiceEnabled) speechPolicy.event("gps-lost", SystemClock.elapsedRealtime())?.let(::announce)
             return
         }
         val time = telemetry.lastFixEpochMillis!!
         if (lastConsumedFixTime?.let { time <= it } == true) return
         lastConsumedFixTime = time
-        applyFix(GeoPoint(telemetry.latitude!!, telemetry.longitude!!), telemetry.accuracyMeters!!.toDouble(), time)
+        applyFix(GeoPoint(telemetry.latitude!!, telemetry.longitude!!), telemetry.accuracyMeters!!.toDouble(), time, telemetry.speedKmh)
     }
 
-    private fun applyFix(point: GeoPoint, accuracy: Double, timestamp: Long) {
+    private fun applyFix(point: GeoPoint, accuracy: Double, timestamp: Long, speedKmh: Float? = null) {
         val route = state.value.route ?: return
         val result = progress?.update(point, accuracy, timestamp) ?: return
         val step = route.steps[result.nextStepIndex]
@@ -269,26 +272,20 @@ class NavigationRepository private constructor(context: Context) {
             error = if (state.value.offRoute && !result.offRoute) null else state.value.error,
             currentPosition = point,
         )
-        val phase = when {
-            result.distanceToTurnMeters > 500 -> 3
-            result.distanceToTurnMeters > 100 -> 2
-            result.distanceToTurnMeters > 25 -> 1
-            else -> 0
-        }
-        val key = when {
+        val speechContext = when {
             result.arrived -> "arrived"
             result.offRoute -> "off-route"
-            else -> "${result.nextStepIndex}:$phase"
+            else -> "step:${result.nextStepIndex}"
         }
-        if (lastSpeechKey != key) {
-            val text = when {
-                result.arrived -> "Vous êtes arrivé à destination."
-                result.offRoute -> "Vous avez quitté l’itinéraire. Recalcul automatique du trajet."
-                result.distanceToTurnMeters < 25 -> step.instruction
-                else -> "Dans ${spokenDistance(result.distanceToTurnMeters)}, ${step.instruction.replaceFirstChar { it.lowercase() }}"
-            }
-            announce(if (simulationEnabled) "Simulation. $text" else text)
-            lastSpeechKey = key
+        // Update on every fix, even if no new announcement is due: a queued turn that has been
+        // passed, or belongs to an invalid GPS position, must never be read later.
+        if (result.arrived) voice.stop()
+        voice.setContext(speechContext)
+        if (state.value.voiceEnabled) {
+            val now = SystemClock.elapsedRealtime()
+            val announcement = if (result.arrived || result.offRoute) speechPolicy.event(speechContext, now)
+                else speechPolicy.maneuver(result.nextStepIndex, step, result.distanceToTurnMeters, speedKmh, now)
+            announcement?.let(::announce)
         }
         if (state.value.active && reroutePolicy.tryStart(
                 offRoute = result.offRoute,
@@ -308,11 +305,14 @@ class NavigationRepository private constructor(context: Context) {
         val end = index.coerceAtMost(route.points.lastIndex)
         val length = offsets[end] - offsets[end - 1]
         val fraction = if (length <= 0) 0.0 else ((simulationDistance - offsets[end - 1]) / length).coerceIn(0.0, 1.0)
-        applyFix(RouteProgressEngine.interpolate(route.points[end - 1], route.points[end], fraction), 3.0, System.currentTimeMillis())
+        applyFix(RouteProgressEngine.interpolate(route.points[end - 1], route.points[end], fraction), 3.0, System.currentTimeMillis(), 50f)
         simulationDistance = (simulationDistance + 13.9).coerceAtMost(offsets.last())
     }
 
-    private fun announce(text: String) { if (state.value.voiceEnabled) voice.speak(text) }
+    private fun announce(announcement: GuidanceAnnouncement) {
+        if (state.value.voiceEnabled) voice.speak(if (simulationEnabled)
+            announcement.copy(text = "Simulation. ${announcement.text}") else announcement)
+    }
 
     private fun hasFreshFix(telemetry: TelemetryState): Boolean {
         val age = telemetry.lastFixEpochMillis?.let { System.currentTimeMillis() - it } ?: return false
@@ -320,11 +320,6 @@ class NavigationRepository private constructor(context: Context) {
             telemetry.latitude in -90.0..90.0 && telemetry.longitude in -180.0..180.0 &&
             telemetry.accuracyMeters?.let { it.isFinite() && it in 0f..25f } == true
     }
-
-    private fun spokenDistance(meters: Double): String = if (meters >= 1_000) {
-        val kilometers = (meters / 1000.0 * 10).roundToInt() / 10.0
-        "${kilometers.toString().replace('.', ',')} kilomètres"
-    } else "${((meters / 10).roundToInt() * 10).coerceAtLeast(10)} mètres"
 
     companion object {
         @Volatile private var instance: NavigationRepository? = null

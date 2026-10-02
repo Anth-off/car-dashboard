@@ -68,7 +68,9 @@ jobs:
       - name: Prepare draft release
         run: |
           cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
-          Cockpit GPS 0.4.1 corrige la reprise musicale et les indications qui pouvaient faire croire que les autorisations avaient disparu après une mise à jour.
+          Cockpit GPS 0.4.1 réduit les annonces vocales du GPS, corrige la reconnexion musicale et clarifie les indications de suivi après une mise à jour.
+
+          Le guidage vocal annonce les manœuvres utiles à la préparation puis à l’action, au lieu de quatre rappels successifs. Les simples changements de nom de route et le maintien tout droit restent visuels. Une instruction normale ne coupe plus la phrase en cours ; les annonces en attente devenues obsolètes sont abandonnées.
 
           Quand Android déconnecte le service musical, Cockpit demande sa reconnexion uniquement si l’accès aux notifications est toujours accordé. Les commandes retrouvent la session Apple Music sans demander de retirer puis réactiver cet accès. Une session Apple Music doit toujours être disponible.
 
