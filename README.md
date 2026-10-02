@@ -8,7 +8,7 @@ La version **0.4.0** reprend le dashboard du téléphone sur Android Auto : mêm
 
 [Page de distribution 0.4.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) · [Version 0.3.0 disponible](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
 
-La publication 0.4.0 prévoit **`cockpit-0.4.0.apk`**, le bundle signé `cockpit-0.4.0.aab`, les sources et les sommes de contrôle SHA-256. Les fichiers deviennent disponibles après la réussite du workflow de publication.
+La version de test 0.4.0 est publiée : [télécharger l’APK](https://github.com/Anth-off/car-dashboard/releases/download/v0.4.0/cockpit-0.4.0.apk). La page de distribution fournit également le bundle signé `cockpit-0.4.0.aab`, les sources et les sommes de contrôle SHA-256.
 
 ![Dashboard sans défilement sur téléphone, au repos](artifacts/cockpit-landscape.png)
 

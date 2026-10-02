@@ -9,7 +9,9 @@ INSTALLATION : mise à jour de Cockpit GPS 0.3.0, même application fr.cockpit.g
 - Android Lint release : aucune erreur.
 - Signature de l’APK final 0.4 : vérifiée, conforme au certificat épinglé de la 0.3.
 - Signature de l’AAB final 0.4 : vérifiée, conforme au même certificat épinglé.
-- Publication GitHub 0.4 : non déclarée réussie à ce stade.
+- Publication GitHub v0.4.0 : réussie, commit source a0d06ecec0b3d6aee5e9bccb8f30ee8dd2826904.
+- Contrôles CI : run 37005404820 réussi ; publication : run 37005759357 réussi.
+- APK téléchargé depuis le lien public et signature vérifiée ; SHA-256 51060c20f078167ec7c4f52b71a63b7434e862ea271ea52ca2b552537cef6952.
 
 Certificat public attendu, identique à Cockpit GPS 0.3 :
 83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30

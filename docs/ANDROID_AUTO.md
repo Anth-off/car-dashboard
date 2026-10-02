@@ -6,7 +6,7 @@ Les barres et commandes propres à Android Auto restent gérées par l’hôte. 
 
 ## Mise à jour sur le S23
 
-Le propriétaire a confirmé que **Cockpit GPS 0.3 fonctionne dans Android Auto après installation avec KingInstaller sur son Samsung S23**. Pour essayer la 0.4, télécharger `cockpit-0.4.0.apk` depuis la [page de distribution](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0), une fois la publication terminée, et reprendre la même méthode.
+Le propriétaire a confirmé que **Cockpit GPS 0.3 fonctionne dans Android Auto après installation avec KingInstaller sur son Samsung S23**. Pour essayer la 0.4 publiée, télécharger `cockpit-0.4.0.apk` depuis la [page de distribution](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) et reprendre la même méthode.
 
 Android doit proposer une **mise à jour**, pas demander de désinstaller Cockpit GPS. Les versions 0.3 et 0.4 utilisent toutes deux `fr.cockpit.gps` et la même signature. Les compteurs, favoris et autorisations existants sont conservés. Si Android indique une signature incompatible, conserver l’installation actuelle et vérifier le fichier utilisé ; un APK `debug` local n’est pas l’APK signé distribué.
 
