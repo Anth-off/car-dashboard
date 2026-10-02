@@ -1,4 +1,4 @@
-name: Android test release
+name: Android signed release
 
 on:
   workflow_dispatch:
@@ -6,14 +6,14 @@ on:
       version:
         description: Release tag
         required: true
-        default: v0.2.0
+        default: v0.3.0
         type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: android-test-release
+  group: android-signed-release
   cancel-in-progress: false
 
 jobs:
@@ -22,6 +22,9 @@ jobs:
     timeout-minutes: 30
     env:
       RELEASE_TAG: ${{ inputs.version }}
+      COCKPIT_SIGNING_STORE_PASSWORD: ${{ secrets.COCKPIT_SIGNING_STORE_PASSWORD }}
+      COCKPIT_SIGNING_KEY_ALIAS: ${{ secrets.COCKPIT_SIGNING_KEY_ALIAS }}
+      COCKPIT_SIGNING_KEY_PASSWORD: ${{ secrets.COCKPIT_SIGNING_KEY_PASSWORD }}
     steps:
       - name: Validate release tag
         run: '[[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]'
@@ -30,6 +33,21 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+      - name: Restore and verify persistent signing key
+        env:
+          COCKPIT_SIGNING_KEYSTORE_BASE64: ${{ secrets.COCKPIT_SIGNING_KEYSTORE_BASE64 }}
+        run: |
+          export COCKPIT_SIGNING_STORE_FILE="$RUNNER_TEMP/cockpit-signing.keystore"
+          printf 'COCKPIT_SIGNING_STORE_FILE=%s\n' "$COCKPIT_SIGNING_STORE_FILE" >> "$GITHUB_ENV"
+          for name in COCKPIT_SIGNING_KEYSTORE_BASE64 COCKPIT_SIGNING_STORE_PASSWORD COCKPIT_SIGNING_KEY_ALIAS COCKPIT_SIGNING_KEY_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing persistent signing secret: $name. See docs/SIGNING.md."
+              exit 1
+            fi
+          done
+          umask 077
+          printf '%s' "$COCKPIT_SIGNING_KEYSTORE_BASE64" | base64 --decode > "$COCKPIT_SIGNING_STORE_FILE"
+          python3 scripts/verify-release-signature.py --keystore "$COCKPIT_SIGNING_STORE_FILE"
       - uses: gradle/actions/setup-gradle@v4
       - uses: android-actions/setup-android@v3
         with:
@@ -37,34 +55,44 @@ jobs:
           log-accepted-android-sdk-licenses: false
       - name: Install Android SDK 35
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-      - name: Build, test and lint
-        run: ./gradlew --no-daemon :app:assembleDebug :app:bundleDebug :app:testDebugUnitTest :app:lintDebug
+      - name: Build signed artifacts, test and lint
+        run: ./gradlew --no-daemon :app:assembleRelease :app:bundleRelease :app:testDebugUnitTest :app:lintRelease
+      - name: Verify artifact signatures and version
+        run: |
+          python3 scripts/verify-release-signature.py --apk app/build/outputs/apk/release/app-release.apk
+          python3 scripts/verify-release-signature.py --bundle app/build/outputs/bundle/release/app-release.aab
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          metadata = json.loads(Path("app/build/outputs/apk/release/output-metadata.json").read_text())
+          outputs = metadata["elements"]
+          if metadata["applicationId"] != "fr.cockpit.dashboard" or len(outputs) != 1:
+              raise SystemExit("Unexpected application identity or APK outputs")
+          if f'v{outputs[0]["versionName"]}' != os.environ["RELEASE_TAG"]:
+              raise SystemExit("Release tag differs from the compiled application version")
+          if outputs[0]["versionCode"] <= 2:
+              raise SystemExit("The versionCode must increase beyond the published 0.2.0 build")
+          PY
       - name: Prepare downloads
         run: |
           mkdir release-artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk "release-artifacts/cockpit-${RELEASE_TAG#v}-debug.apk"
-          cp app/build/outputs/bundle/debug/app-debug.aab "release-artifacts/cockpit-${RELEASE_TAG#v}-debug.aab"
+          cp app/build/outputs/apk/release/app-release.apk "release-artifacts/cockpit-${RELEASE_TAG#v}.apk"
+          cp app/build/outputs/bundle/release/app-release.aab "release-artifacts/cockpit-${RELEASE_TAG#v}.aab"
           git archive --format=zip --prefix=cockpit/ --output=release-artifacts/cockpit-sources.zip HEAD
           cd release-artifacts
           sha256sum *.apk *.aab *.zip > SHA256SUMS.txt
-      - name: Publish test prerelease
+      - name: Publish signed prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > release-notes.md <<'EOF'
-          Cockpit : une carte plus grande et une navigation enrichie.
+          Cockpit : dashboard et menus sans défilement sur téléphone et Android Auto.
 
-          - Carte prioritaire dans le dashboard, mode plein écran sur téléphone, déplacement au doigt, zoom/pincement, recentrage, orientation et vue d’ensemble.
-          - Carte jour/nuit, destination visible, itinéraire parcouru atténué, échelle et précision GPS.
-          - Heure d’arrivée estimée hors trafic, prochaine manœuvre et suivante, liste des étapes, commande vocale directe, recalcul automatique après sortie confirmée.
-          - Recherche d’adresses améliorée, favoris et 12 destinations récentes locales.
-          - Android Auto : carte manipulable et options de guidage adaptées aux modèles du véhicule.
+          APK et AAB signés après les tests JVM/Robolectric et Android Lint. La publication vérifie que le certificat correspond à celui de Cockpit 0.2.0 et que le numéro de version augmente. L'installation d'une mise à jour compatible conserve les compteurs et favoris locaux.
 
-          APK et AAB de débogage compilés après les tests JVM/Robolectric et Android Lint. Les essais sur autoradio et avec une session Apple Music réelle restent à effectuer.
-
-          L’APK permet les essais sur téléphone. Pour Android Auto, utiliser un canal de test Google Play compatible avec la Car App Library ; une installation directe ne suffit pas.
-
-          La signature de débogage CI peut différer des APK précédents : une réinstallation peut être nécessaire et efface alors les données locales. Ces fichiers sont réservés aux essais, sans trafic en direct ni garantie des services publics de navigation.
+          Les essais sur autoradio et avec une session Apple Music réelle restent à effectuer. Pour Android Auto, utiliser un canal de test Google Play compatible avec la Car App Library ; une installation directe ne suffit pas. Ces fichiers restent réservés aux essais, sans trafic en direct ni garantie des services publics de navigation.
           EOF
           release_state=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)
           if [[ "$release_state" == false ]]; then
@@ -76,3 +104,6 @@ jobs:
           fi
           gh release upload "$RELEASE_TAG" release-artifacts/* --clobber
           gh release edit "$RELEASE_TAG" --draft=false --prerelease --target "$GITHUB_SHA" --title "Cockpit ${RELEASE_TAG#v}" --notes-file release-notes.md
+      - name: Remove restored signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/cockpit-signing.keystore"

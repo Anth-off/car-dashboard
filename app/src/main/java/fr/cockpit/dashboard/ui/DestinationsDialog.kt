@@ -3,8 +3,6 @@ package fr.cockpit.dashboard.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -46,6 +44,7 @@ fun DestinationsDialog(repository: DestinationRepository, saved: List<Destinatio
     var loading by remember { mutableStateOf(false) }
     var searched by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var editingQuery by remember { mutableStateOf(saved.isEmpty()) }
     var manual by remember { mutableStateOf(false) }
     var clearHistory by remember { mutableStateOf(false) }
     var searchJob by remember { mutableStateOf<Job?>(null) }
@@ -66,6 +65,7 @@ fun DestinationsDialog(repository: DestinationRepository, saved: List<Destinatio
     fun search() {
         if (query.isBlank() || loading) return
         keyboard?.hide()
+        editingQuery = false
         searchJob?.cancel()
         val generation = ++searchGeneration
         val submittedQuery = query
@@ -79,141 +79,148 @@ fun DestinationsDialog(repository: DestinationRepository, saved: List<Destinatio
                 val found = withTimeout(20_000) { repository.search(submittedQuery) }
                 if (generation == searchGeneration) results = found
             } catch (timeout: TimeoutCancellationException) {
-                if (generation == searchGeneration) error = "La recherche prend trop de temps. Réessayez ou utilisez les coordonnées GPS."
+                if (generation == searchGeneration) error = "Réessayez ou saisissez des coordonnées GPS."
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (problem: Exception) {
-                if (generation == searchGeneration) error = problem.message ?: "La recherche est indisponible. Réessayez."
+                if (generation == searchGeneration) error = problem.message ?: "Réessayez la recherche."
             } finally {
                 if (generation == searchGeneration) loading = false
             }
         }
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(Modifier.padding(16.dp).widthIn(max = 680.dp).fillMaxWidth().fillMaxHeight(.94f),
-            shape = RoundedCornerShape(28.dp), color = Ink, tonalElevation = 0.dp) {
-            Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).background(Lime, RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Rounded.Explore, null, tint = Ink)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(if (manual) "Un point sur la carte" else "Où allons-nous ?", fontWeight = FontWeight.Bold,
-                            fontSize = 21.sp, color = Mist)
-                        Text(if (manual) "Ajouter des coordonnées GPS" else "Trouvez votre prochaine destination", style = MaterialTheme.typography.bodySmall, color = Muted)
-                    }
-                    IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, "Fermer les destinations", tint = Muted) }
-                }
-                if (manual) {
-                    ManualDestinationForm(Modifier.weight(1f), repository,
-                        onSaved = { manual = false; tab = DestinationTab.FAVORITES }, onNavigate = onNavigate)
-                    TextButton(onClick = { manual = false }) { Icon(Icons.Rounded.ArrowBack, null); Spacer(Modifier.width(8.dp)); Text("Retour aux destinations") }
-                } else {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedTextField(query, onValueChange = ::updateQuery, placeholder = { Text("Adresse, ville ou lieu…") },
-                            leadingIcon = { Icon(Icons.Rounded.Search, null) },
-                            trailingIcon = if (query.isNotEmpty()) {{ IconButton(onClick = { updateQuery("") }) { Icon(Icons.Rounded.Close, "Effacer la recherche") } }} else null,
-                            singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f),
-                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { search() }))
-                        FilledIconButton(onClick = ::search, enabled = query.isNotBlank() && !loading,
-                            modifier = Modifier.size(52.dp), shape = RoundedCornerShape(16.dp)) {
-                            Icon(Icons.Rounded.ArrowForward, "Rechercher")
-                        }
-                    }
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        DestinationTab.entries.forEach { choice ->
-                            FilterChip(selected = tab == choice, onClick = { tab = choice },
-                                label = { Text(when (choice) {
-                                    DestinationTab.SEARCH -> "Recherche"
-                                    DestinationTab.FAVORITES -> "Favoris"
-                                    DestinationTab.RECENTS -> "Récents"
-                                }, fontSize = 12.sp) },
-                                leadingIcon = { Icon(when (choice) {
-                                    DestinationTab.SEARCH -> Icons.Rounded.Search
-                                    DestinationTab.FAVORITES -> Icons.Rounded.StarOutline
-                                    DestinationTab.RECENTS -> Icons.Rounded.History
-                                }, null, Modifier.size(16.dp)) })
-                        }
-                    }
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        when {
-                            tab == DestinationTab.SEARCH && loading -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                                CircularProgressIndicator(color = Lime, modifier = Modifier.size(32.dp), strokeWidth = 3.dp)
-                                Text("Recherche de votre destination…", color = Muted, style = MaterialTheme.typography.bodyMedium)
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding(), contentAlignment = Alignment.Center) {
+            val compactWindow = maxHeight < 260.dp
+            Surface(Modifier.padding(if (compactWindow) 0.dp else 8.dp).widthIn(max = 720.dp).fillMaxWidth().fillMaxHeight(),
+                shape = RoundedCornerShape(24.dp), color = Ink, tonalElevation = 0.dp) {
+                BoxWithConstraints(Modifier.fillMaxSize().padding(if (compactWindow) 4.dp else 12.dp)) {
+                    val compact = maxHeight < 220.dp
+                    when {
+                        manual -> ManualDestinationForm(Modifier.fillMaxSize(), repository,
+                            onSaved = { manual = false; tab = DestinationTab.FAVORITES }, onNavigate = onNavigate,
+                            onBack = { keyboard?.hide(); manual = false })
+                        clearHistory -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceBetween) {
+                            Text("Effacer les trajets récents ?", color = Mist, fontWeight = FontWeight.SemiBold, fontSize = 20.sp)
+                            Text("Vos favoris seront conservés.", color = Muted)
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                TextButton(onClick = { clearHistory = false }) { Text("Annuler") }
+                                Button(onClick = { repository.clearRecents(); clearHistory = false }) { Text("Effacer") }
                             }
-                            tab == DestinationTab.SEARCH && error != null -> DestinationEmptyState(Icons.Rounded.WifiOff,
-                                "Recherche indisponible", error.orEmpty(), "Réessayer", ::search)
-                            tab == DestinationTab.SEARCH && results.isEmpty() -> DestinationEmptyState(Icons.Rounded.TravelExplore,
-                                if (searched) "Aucun lieu trouvé" else "La route commence ici",
-                                if (searched) "Ajoutez la ville ou le code postal à votre recherche. Vous pouvez aussi utiliser des coordonnées GPS."
-                                else "Recherchez une adresse, un restaurant ou une ville. Touchez un lieu pour lancer le guidage, ou son étoile pour le garder.")
-                            tab == DestinationTab.FAVORITES && saved.isEmpty() -> DestinationEmptyState(Icons.Rounded.StarOutline,
-                                "Vos adresses à portée de main", "Enregistrez un résultat avec son étoile. Vos favoris sont aussi disponibles dans Android Auto.",
-                                "Rechercher un lieu", { tab = DestinationTab.SEARCH })
-                            tab == DestinationTab.RECENTS && recents.isEmpty() -> DestinationEmptyState(Icons.Rounded.History,
-                                "Votre prochain trajet vous attend", "Les 12 dernières destinations de vos guidages seront conservées ici, sur ce téléphone.")
-                            else -> {
-                                val destinations = when (tab) {
-                                    DestinationTab.SEARCH -> results
-                                    DestinationTab.FAVORITES -> saved
-                                    DestinationTab.RECENTS -> recents
+                        }
+                        editingQuery -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
+                            if (!compact) Text("Où allons-nous ?", color = Mist, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                OutlinedTextField(query, onValueChange = ::updateQuery, label = { Text("Adresse, ville ou lieu") },
+                                    singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.weight(1f),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search), keyboardActions = KeyboardActions(onSearch = { search() }))
+                                FilledIconButton(onClick = ::search, enabled = query.isNotBlank() && !loading, modifier = Modifier.size(48.dp)) {
+                                    Icon(Icons.Rounded.Search, "Rechercher")
                                 }
-                                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    item {
-                                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                                            Text(when (tab) {
-                                                DestinationTab.SEARCH -> "${destinations.size} lieu${if (destinations.size > 1) "x" else ""} trouvé${if (destinations.size > 1) "s" else ""}"
-                                                DestinationTab.FAVORITES -> "Vos lieux enregistrés · ${destinations.size}"
-                                                DestinationTab.RECENTS -> "Derniers guidages"
-                                            }, color = Muted, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-                                            if (tab == DestinationTab.RECENTS) TextButton(onClick = { clearHistory = true }) { Text("Effacer") }
+                                IconButton(onClick = { keyboard?.hide(); editingQuery = false }) {
+                                    Icon(Icons.Rounded.Close, "Fermer la saisie", tint = Muted)
+                                }
+                            }
+                            if (!compact) Text("Recherchez une adresse ou saisissez latitude, longitude.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                        else -> Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text("Destinations", color = Mist, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
+                                IconButton(onClick = { editingQuery = true }) { Icon(Icons.Rounded.Search, "Rechercher une adresse", tint = Lime) }
+                                IconButton(onClick = { manual = true }) { Icon(Icons.Rounded.MyLocation, "Saisir des coordonnées GPS", tint = Lime) }
+                                IconButton(onClick = onDismiss) { Icon(Icons.Rounded.Close, "Fermer les destinations", tint = Muted) }
+                            }
+                            Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                DestinationTab.entries.forEach { choice ->
+                                    FilterChip(selected = tab == choice, onClick = { tab = choice }, modifier = Modifier.weight(1f),
+                                        label = { Text(when (choice) {
+                                            DestinationTab.SEARCH -> "Recherche"
+                                            DestinationTab.FAVORITES -> "Favoris"
+                                            DestinationTab.RECENTS -> "Récents"
+                                        }, fontSize = 12.sp, maxLines = 1) })
+                                }
+                            }
+                            Box(Modifier.weight(1f).fillMaxWidth()) {
+                                when {
+                                    tab == DestinationTab.SEARCH && loading -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        CircularProgressIndicator(color = Lime, modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                                        Text("Recherche en cours…", color = Muted)
+                                    }
+                                    tab == DestinationTab.SEARCH && error != null -> DestinationEmptyState(Icons.Rounded.WifiOff,
+                                        "Recherche indisponible", error.orEmpty(), "Réessayer", ::search)
+                                    tab == DestinationTab.SEARCH && results.isEmpty() -> DestinationEmptyState(Icons.Rounded.TravelExplore,
+                                        if (searched) "Aucun lieu trouvé" else "Votre prochaine destination",
+                                        if (searched) "Précisez la ville ou le code postal." else "Recherchez un lieu ou ajoutez ses coordonnées GPS.",
+                                        "Rechercher", { editingQuery = true })
+                                    tab == DestinationTab.FAVORITES && saved.isEmpty() -> DestinationEmptyState(Icons.Rounded.StarOutline,
+                                        "Aucun favori", "Touchez l’étoile d’un résultat pour le conserver.", "Rechercher", { editingQuery = true })
+                                    tab == DestinationTab.RECENTS && recents.isEmpty() -> DestinationEmptyState(Icons.Rounded.History,
+                                        "Aucun trajet récent", "Vos 12 dernières destinations apparaîtront ici.")
+                                    else -> {
+                                        val destinations = when (tab) {
+                                            DestinationTab.SEARCH -> results
+                                            DestinationTab.FAVORITES -> saved
+                                            DestinationTab.RECENTS -> recents
+                                        }
+                                        key(tab) {
+                                            DestinationPages(destinations, saved, onNavigate,
+                                                onFavorite = { repository.toggleFavorite(it) }, isFavorite = repository::isFavorite,
+                                                onClear = if (tab == DestinationTab.RECENTS) {{ clearHistory = true }} else null)
                                         }
                                     }
-                                    items(destinations, key = { it.id }) { destination ->
-                                        DestinationRow(destination, onNavigate,
-                                            onFavorite = { repository.toggleFavorite(destination) }, favorite = repository.isFavorite(destination))
-                                    }
                                 }
                             }
                         }
-                    }
-                    HorizontalDivider(color = SurfaceRaised)
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { manual = true }) {
-                            Icon(Icons.Rounded.MyLocation, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Coordonnées GPS")
-                        }
-                        Text("À préparer\nà l’arrêt", color = Muted, style = MaterialTheme.typography.labelSmall)
                     }
                 }
             }
         }
     }
-    if (clearHistory) AlertDialog(onDismissRequest = { clearHistory = false }, title = { Text("Effacer les trajets récents ?") },
-        text = { Text("Vos favoris seront conservés.") },
-        confirmButton = { TextButton(onClick = { repository.clearRecents(); clearHistory = false }) { Text("Effacer") } },
-        dismissButton = { TextButton(onClick = { clearHistory = false }) { Text("Annuler") } })
+}
+
+/** Fixed pages: the number of rows follows the available viewport, never a scrolling container. */
+@Composable
+private fun DestinationPages(destinations: List<Destination>, favorites: List<Destination>, onNavigate: (Destination) -> Unit,
+    onFavorite: (Destination) -> Unit, isFavorite: (Destination) -> Boolean, onClear: (() -> Unit)?) {
+    var page by remember { mutableIntStateOf(0) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val rows = ((maxHeight.value - 54f) / 74f).toInt().coerceIn(1, 6)
+        val pages = ((destinations.size + rows - 1) / rows).coerceAtLeast(1)
+        val visiblePage = page.coerceIn(0, pages - 1)
+        LaunchedEffect(visiblePage) { page = visiblePage }
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                destinations.drop(visiblePage * rows).take(rows).forEach { destination ->
+                    val favorite = remember(destination, favorites) { isFavorite(destination) }
+                    DestinationRow(destination, onNavigate, { onFavorite(destination) }, favorite)
+                }
+            }
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { page = visiblePage - 1 }, enabled = visiblePage > 0) { Icon(Icons.Rounded.ChevronLeft, "Page précédente") }
+                Text("${visiblePage + 1} / $pages", color = Muted, modifier = Modifier.weight(1f), fontSize = 13.sp)
+                if (onClear != null) TextButton(onClick = onClear) { Text("Effacer") }
+                IconButton(onClick = { page = visiblePage + 1 }, enabled = visiblePage < pages - 1) { Icon(Icons.Rounded.ChevronRight, "Page suivante") }
+            }
+        }
+    }
 }
 
 @Composable
 private fun DestinationRow(destination: Destination, onNavigate: (Destination) -> Unit, onFavorite: () -> Unit, favorite: Boolean) {
-    Surface(shape = RoundedCornerShape(18.dp), color = Surface) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Row(Modifier.weight(1f).clickable { onNavigate(destination) }.padding(start = 14.dp, top = 16.dp, bottom = 16.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).background(SurfaceRaised, CircleShape), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.NearMe, null, tint = Lime, modifier = Modifier.size(19.dp))
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(destination.name, fontWeight = FontWeight.SemiBold, color = Mist, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Surface(Modifier.fillMaxWidth().height(68.dp), shape = RoundedCornerShape(16.dp), color = Surface) {
+        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.weight(1f).fillMaxHeight().clickable { onNavigate(destination) }.padding(start = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Rounded.NearMe, null, tint = Lime, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(destination.name, fontWeight = FontWeight.SemiBold, color = Mist, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(destination.address.ifBlank { String.format(Locale.FRANCE, "%.4f°, %.4f°", destination.latitude, destination.longitude) },
-                        color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            IconButton(onClick = onFavorite, modifier = Modifier.padding(horizontal = 4.dp)) {
+            IconButton(onClick = onFavorite) {
                 Icon(if (favorite) Icons.Rounded.Star else Icons.Rounded.StarOutline,
                     if (favorite) "Retirer ${destination.name} des favoris" else "Enregistrer ${destination.name} en favori", tint = if (favorite) Lime else Muted)
             }
@@ -223,41 +230,77 @@ private fun DestinationRow(destination: Destination, onNavigate: (Destination) -
 
 @Composable
 private fun BoxScope.DestinationEmptyState(icon: ImageVector, title: String, message: String, action: String? = null, onAction: () -> Unit = {}) {
-    Column(Modifier.align(Alignment.Center).padding(horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Box(Modifier.size(70.dp).background(Surface, CircleShape), contentAlignment = Alignment.Center) { Icon(icon, null, Modifier.size(30.dp), tint = Lime) }
-        Text(title, fontWeight = FontWeight.SemiBold, fontSize = 18.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Text(message, color = Muted, style = MaterialTheme.typography.bodyMedium, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        if (action != null) TextButton(onClick = onAction) { Text(action) }
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val contentHeight = maxHeight
+        Column(Modifier.align(Alignment.Center).padding(horizontal = 8.dp), horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (contentHeight >= 230.dp) Box(Modifier.size(56.dp).background(Surface, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, null, Modifier.size(26.dp), tint = Lime)
+            }
+            Text(title, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(message, color = Muted, style = MaterialTheme.typography.bodySmall, maxLines = if (contentHeight < 180.dp) 2 else 4,
+                overflow = TextOverflow.Ellipsis, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            if (action != null) TextButton(onClick = onAction) { Text(action) }
+        }
     }
 }
 
 @Composable
-private fun ManualDestinationForm(modifier: Modifier, repository: DestinationRepository, onSaved: () -> Unit, onNavigate: (Destination) -> Unit) {
+private fun ManualDestinationForm(modifier: Modifier, repository: DestinationRepository, onSaved: () -> Unit,
+    onNavigate: (Destination) -> Unit, onBack: () -> Unit) {
     var name by remember { mutableStateOf("") }
     var latitude by remember { mutableStateOf("") }
     var longitude by remember { mutableStateOf("") }
-    var error by remember { mutableStateOf<String?>(null) }
-    val ready = latitude.isNotBlank() && longitude.isNotBlank()
-    fun destination(): Destination? = runCatching {
-        Destination(UUID.randomUUID().toString(), name.trim().ifEmpty { "Point GPS" },
-            latitude.trim().replace(',', '.').toDouble(), longitude.trim().replace(',', '.').toDouble())
-    }.onFailure { error = "Vérifiez la latitude (−90 à 90) et la longitude (−180 à 180)." }.getOrNull()
-    LazyColumn(modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Text("Un point précis, même sans recherche d’adresse. Les virgules et les points décimaux sont acceptés.", color = Muted, style = MaterialTheme.typography.bodyMedium) }
-        item { OutlinedTextField(name, onValueChange = { name = it }, label = { Text("Nom du lieu (facultatif)") }, singleLine = true,
-            shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(latitude, onValueChange = { latitude = it; error = null }, label = { Text("Latitude") }, placeholder = { Text("48.8566") },
-            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
-        item { OutlinedTextField(longitude, onValueChange = { longitude = it; error = null }, label = { Text("Longitude") }, placeholder = { Text("2.3522") },
-            singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) }
-        error?.let { message -> item { Text(message, color = MaterialTheme.colorScheme.error) } }
-        item { Button(onClick = { destination()?.let(onNavigate) }, enabled = ready, modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
-            Icon(Icons.Rounded.Navigation, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Y aller")
-        } }
-        item { OutlinedButton(onClick = { destination()?.let { repository.addFavorite(it); onSaved() } }, enabled = ready,
-            modifier = Modifier.fillMaxWidth().height(50.dp), shape = RoundedCornerShape(16.dp)) {
-            Icon(Icons.Rounded.StarOutline, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Enregistrer en favori")
-        } }
+    var step by remember { mutableIntStateOf(0) }
+    var invalid by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun coordinate(text: String, limit: Double) = text.trim().replace(',', '.').toDoubleOrNull()?.takeIf { it.isFinite() && it in -limit..limit }
+    fun next() {
+        if (step >= 3) return
+        invalid = when (step) {
+            1 -> coordinate(latitude, 90.0) == null
+            2 -> coordinate(longitude, 180.0) == null
+            else -> false
+        }
+        if (!invalid) {
+            if (step == 2) keyboard?.hide()
+            step++
+        }
+    }
+    fun destination() = Destination(UUID.randomUUID().toString(), name.trim().ifEmpty { "Point GPS" },
+        requireNotNull(coordinate(latitude, 90.0)), requireNotNull(coordinate(longitude, 180.0)))
+
+    BoxWithConstraints(modifier) {
+        val compact = maxHeight < 220.dp
+        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!compact) Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("Coordonnées GPS", color = Mist, fontSize = 21.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                IconButton(onClick = onBack) { Icon(Icons.Rounded.Close, "Fermer les coordonnées", tint = Muted) }
+            }
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                if (step < 3) {
+                    OutlinedTextField(value = when (step) { 0 -> name; 1 -> latitude; else -> longitude },
+                        onValueChange = { value -> invalid = false; when (step) { 0 -> name = value; 1 -> latitude = value; else -> longitude = value } },
+                        label = { Text(when (step) { 0 -> "Nom du lieu (facultatif)"; 1 -> "Latitude : −90 à 90"; else -> "Longitude : −180 à 180" }) },
+                        placeholder = { Text(when (step) { 0 -> "Point GPS"; 1 -> "48.8566"; else -> "2.3522" }) },
+                        isError = invalid, singleLine = true, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text, imeAction = if (step == 2) ImeAction.Done else ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { next() }, onDone = { next() }))
+                } else Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(name.ifBlank { "Point GPS" }, color = Mist, fontSize = 22.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(String.format(Locale.FRANCE, "%.5f°, %.5f°", coordinate(latitude, 90.0), coordinate(longitude, 180.0)), color = Muted)
+                    Text("Lancer le guidage ou conserver ce lieu.", color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { invalid = false; if (step > 0) step-- else onBack() }) { Text("Retour") }
+                Text("${step + 1} / 4", color = Muted, modifier = Modifier.weight(1f), fontSize = 12.sp)
+                if (step < 3) Button(onClick = ::next) { Text(if (step == 2) "Vérifier" else "Suivant") }
+                else {
+                    IconButton(onClick = { repository.addFavorite(destination()); onSaved() }) { Icon(Icons.Rounded.StarOutline, "Enregistrer en favori", tint = Lime) }
+                    Button(onClick = { onNavigate(destination()) }) { Text("Y aller") }
+                }
+            }
+        }
     }
 }

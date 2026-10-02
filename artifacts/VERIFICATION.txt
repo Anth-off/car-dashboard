@@ -1,22 +1,31 @@
-Cockpit 0.2.0 — vérification du 2 octobre 2026
+Cockpit 0.3.0 — sources et vérification du 2 octobre 2026
 
-Compilation APK et AAB : réussie.
-Signature APK debug : vérifiée (APK Signature Scheme v2).
+STATUT INSTALLATION : aucune mise à jour installable publiée. La clé privée de signature de l'APK GitHub 0.2.0 n'a pas été conservée. Une signature différente ne peut pas mettre à jour cette installation. Aucun effacement, désinstallation ou migration de l'utilisateur effectué.
+
+Compilation du build de développement : réussie.
 Android Lint : aucune erreur ; avertissements non bloquants.
-43 tests réussis :
-- 7 compteurs GPS
-- 6 progression navigation
-- 7 politique de recalcul automatique
-- 6 projection, cadrage et zoom cartographiques
-- 7 persistance, déduplication et recherche de destinations
-- 5 modèles Android Auto et zones de carte
-- 3 lancement/rendu Activity (portrait, paysage, paysage compact 851 x 393 dp)
-- 2 interactions navigation (plein écran/recherche, voix/arrêt et commandes en paysage compact)
+76 tests JVM/Robolectric réussis, dont :
+- CarTemplateSmokeTest : 9
+- DestinationRepositoryTest : 7
+- DrivingMapCameraTest : 5
+- MapProjectionTest : 6
+- AutomaticReroutePolicyTest : 7
+- NavigationRouteSelectionTest : 3
+- OsrmRoutingClientTest : 8
+- RouteOptionSelectionTest : 2
+- RouteProgressEngineTest : 6
+- DistanceAccumulatorTest : 7
+- DashboardViewportTest : 4
+- FixedDialogsTest : 5
+- MainActivityRenderTest : 3
+- NavigationPanelTest : 4
 
-Les aperçus portrait/paysage proviennent du véritable écran Compose au repos, dessiné par le moteur graphique Android natif de Robolectric. Aucun trajet ni relevé fictif. En l’absence de position GPS, la carte affiche son état d’attente.
+Écrans contrôlés : 412×915, 851×393, 360×640 dp, avec texte jusqu'à 130 % et clavier paysage simulé. Contrôles complets dans le viewport, aucune liste/panneau défilant. Les longs contenus sont paginés.
 
-Les coordonnées, les capteurs et la disponibilité des services en ligne ne sont pas simulés dans l’application. Les tests unitaires utilisent des données isolées pour vérifier les calculs et les interactions.
+Signature : APK GitHub 0.2.0 accepté par le certificat épinglé ; APK local signé avec une autre clé refusé ; AAB non signé refusé ; AAB altéré avec une entrée non signée refusé. Le contrôle Gradle de publication refuse une configuration de clé manquante. Aucun keystore ni secret créé ou publié.
 
-À vérifier avec le matériel de l’utilisateur : projection Android Auto réelle, session Apple Music, réception GPS et guidage sur route. Pour l’autoradio, installer via un canal de confiance Google Play ; l’APK direct ne suffit pas pour la Car App Library.
+Routage public vérifié entre points proches des centres de Sainville et Dourdan : deux serveurs OSRM automobiles retournent D5/D17 17,54 km / 23 min et D17/D838 18,46 km / 25,3 min. Points approximatifs, sans adresses domicile/travail ni trafic réel. Le choix est le plus rapide parmi les alternatives reçues, pas une garantie sur toutes les routes.
 
-Les services publics de cartographie/calcul n’offrent pas de garantie de disponibilité. La navigation est en ligne, sans trafic en direct, cartes hors ligne téléchargeables, limites de vitesse ou signalements routiers.
+Les images montrent le véritable écran Compose au repos via le moteur graphique natif Robolectric. Pas de trajet ou données GPS fictives dans l'application. Le fond de carte attend la position GPS au démarrage.
+
+Restent à vérifier sur matériel : capteurs/GPS routiers, Android Auto réel, session Apple Music réelle. L'affichage et la navigation dépendent des fournisseurs publics et de la connectivité. Pas de trafic, fermetures routières ou cartes hors ligne.

@@ -1,73 +1,59 @@
-@file:Suppress("DEPRECATION") // The legacy header setters support Car App API levels below 7.
+@file:Suppress("DEPRECATION") // Legacy header setters support Car App API levels below 7.
 
 package fr.cockpit.dashboard.car
 
 import androidx.car.app.CarContext
 import androidx.car.app.model.Action
-import androidx.car.app.model.ItemList
-import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
-import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import fr.cockpit.dashboard.destinations.Destination
 import fr.cockpit.dashboard.destinations.DestinationRepository
 import fr.cockpit.dashboard.navigation.NavigationRepository
 import java.util.Locale
 
+/** One favorite per fixed card, regardless of how many places are saved on the phone. */
 internal class DestinationListScreen(carContext: CarContext) : LiveCarScreen(carContext) {
     private val destinations = DestinationRepository.get(carContext)
-    init {
-        observe(destinations.state)
-    }
+    private var selectedIndex = 0
+
+    init { observe(destinations.state) }
 
     override fun onGetTemplate(): Template {
-        val list = ItemList.Builder()
-            .addItem(
-                Row.Builder()
-                    .setTitle("Carte et navigation")
-                    .addText("Carte intégrée et guidage Cockpit")
-                    .setBrowsable(true)
-                    .setOnClickListener { screenManager.push(NavigationScreen(carContext)) }
-                    .build()
-            )
-            .addItem(
-                Row.Builder()
-                    .setTitle("Informations du trajet")
-                    .addText("Vitesse, distance et météo • prototype")
-                    .setBrowsable(true)
-                    .setOnClickListener { screenManager.push(TripScreen(carContext)) }
-                    .build()
-            )
-
-        val favorites = destinations.state.value.take(15)
-        if (favorites.isEmpty()) {
-            list.addItem(
-                Row.Builder()
-                    .setTitle("Aucune destination enregistrée")
-                    .addText("Ajoutez vos lieux sur le téléphone, une fois à l’arrêt.")
-                    .build()
-            )
-        } else {
-            favorites.forEach { destination ->
-                list.addItem(
-                    Row.Builder()
-                        .setTitle(destination.name)
-                        .addText("Destination favorite")
-                        .setBrowsable(true)
-                        .setOnClickListener {
-                            screenManager.push(DestinationScreen(carContext, destination))
-                        }
-                        .build()
-                )
-            }
+        val favorites = destinations.state.value
+        selectedIndex = selectedIndex.coerceIn(0, (favorites.size - 1).coerceAtLeast(0))
+        val destination = favorites.getOrNull(selectedIndex)
+        val pane = Pane.Builder()
+            // Keep both titles and the row count stable: page changes remain refreshes, so
+            // browsing more than five favorites never exhausts the host's template quota.
+            .addRow(compactCarRow("Destination favorite", destination?.let {
+                "${selectedIndex + 1}/${favorites.size} · ${it.name}"
+            } ?: "Ajoutez un lieu sur le téléphone, à l’arrêt."))
+            .addRow(compactCarRow("Adresse", destination?.let(::destinationAddress) ?: "Aucun favori enregistré"))
+            .addAction(Action.Builder().setTitle("Carte")
+                .setOnClickListener { screenManager.push(NavigationScreen(carContext)) }.build())
+        if (destination != null) {
+            pane.addAction(Action.Builder().setTitle("Y aller").setOnClickListener {
+                if (canStartCarNavigation(carContext)) {
+                    NavigationRepository.get(carContext).start(destination)
+                    screenManager.push(NavigationScreen(carContext))
+                }
+            }.build())
         }
-
-        return ListTemplate.Builder()
+        val template = PaneTemplate.Builder(pane.build())
             .setTitle("Cockpit · Destinations")
             .setHeaderAction(Action.APP_ICON)
-            .setSingleList(list.build())
-            .build()
+        if (favorites.size > 1) template.setActionStrip(carPageActions(
+            previous = { changePage(-1) }, next = { changePage(1) },
+        ))
+        return template.build()
+    }
+
+    private fun changePage(direction: Int) {
+        val count = destinations.state.value.size
+        if (count <= 1) return
+        selectedIndex = Math.floorMod(selectedIndex + direction, count)
+        invalidate()
     }
 }
 
@@ -75,50 +61,20 @@ internal class DestinationScreen(
     carContext: CarContext,
     private val destination: Destination,
 ) : androidx.car.app.Screen(carContext) {
-    override fun onGetTemplate(): Template {
-        val pane = Pane.Builder()
-            .addRow(
-                Row.Builder()
-                    .setTitle("Destination")
-                    .addText(destination.name)
-                    .build()
-            )
-            .addRow(
-                Row.Builder()
-                    .setTitle("Position")
-                    .addText(
-                        String.format(
-                            Locale.FRANCE,
-                            "%.5f°, %.5f°",
-                            destination.latitude,
-                            destination.longitude,
-                        )
-                    )
-                    .build()
-            )
-            .addRow(
-                Row.Builder()
-                    .setTitle("Guidage")
-                    .addText("Guidage Cockpit avec carte et instructions vocales.")
-                    .build()
-            )
-            .addAction(
-                Action.Builder()
-                    .setTitle("Y aller")
-                    .setOnClickListener { startNavigation() }
-                    .build()
-            )
-            .build()
+    override fun onGetTemplate(): Template = PaneTemplate.Builder(
+        Pane.Builder()
+            .addRow(compactCarRow("Destination", destination.name))
+            .addRow(compactCarRow("Adresse", destinationAddress(destination)))
+            .addAction(Action.Builder().setTitle("Y aller").setOnClickListener {
+                if (canStartCarNavigation(carContext)) {
+                    NavigationRepository.get(carContext).start(destination)
+                    screenManager.push(NavigationScreen(carContext))
+                }
+            }.build())
+            .build(),
+    ).setTitle("Destination").setHeaderAction(Action.BACK).build()
+}
 
-        return PaneTemplate.Builder(pane)
-            .setTitle("Destination")
-            .setHeaderAction(Action.BACK)
-            .build()
-    }
-
-    private fun startNavigation() {
-        if (!canStartCarNavigation(carContext)) return
-        NavigationRepository.get(carContext).start(destination)
-        screenManager.push(NavigationScreen(carContext))
-    }
+private fun destinationAddress(destination: Destination): String = destination.address.ifBlank {
+    String.format(Locale.FRANCE, "%.5f°, %.5f°", destination.latitude, destination.longitude)
 }

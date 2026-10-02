@@ -1,7 +1,46 @@
+import java.security.KeyStore
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+// Debug builds remain local development builds. Distributed builds must use the
+// same externally backed-up key; never fall back to a runner's debug keystore.
+val cockpitSigningEnvironment = listOf(
+    "COCKPIT_SIGNING_STORE_FILE",
+    "COCKPIT_SIGNING_STORE_PASSWORD",
+    "COCKPIT_SIGNING_KEY_ALIAS",
+    "COCKPIT_SIGNING_KEY_PASSWORD",
+).associateWith { providers.environmentVariable(it).orNull }
+val cockpitSigningConfigured = cockpitSigningEnvironment.values.all { !it.isNullOrBlank() }
+
+val checkCockpitReleaseSigning by tasks.registering {
+    doLast {
+        val missing = cockpitSigningEnvironment.filterValues { it.isNullOrBlank() }.keys
+        check(missing.isEmpty()) {
+            "Release signing requires a persistent keystore. Missing: ${missing.joinToString()}. See docs/SIGNING.md."
+        }
+        val keystoreFile = file(cockpitSigningEnvironment.getValue("COCKPIT_SIGNING_STORE_FILE")!!)
+        check(keystoreFile.isFile) {
+            "The persistent release keystore does not exist. See docs/SIGNING.md."
+        }
+        val keystore = KeyStore.getInstance(
+            keystoreFile,
+            cockpitSigningEnvironment.getValue("COCKPIT_SIGNING_STORE_PASSWORD")!!.toCharArray(),
+        )
+        val certificate = checkNotNull(keystore.getCertificate(cockpitSigningEnvironment.getValue("COCKPIT_SIGNING_KEY_ALIAS")!!)) {
+            "The configured signing alias has no certificate."
+        }
+        val fingerprint = MessageDigest.getInstance("SHA-256").digest(certificate.encoded)
+            .joinToString("") { "%02x".format(it) }
+        val expected = rootProject.file("docs/release-signing-certificate.sha256").readText().trim()
+        check(fingerprint == expected) {
+            "Release signing differs from the published Cockpit 0.2.0 identity; in-place updates would fail. See docs/SIGNING.md."
+        }
+    }
 }
 
 android {
@@ -12,8 +51,8 @@ android {
         applicationId = "fr.cockpit.dashboard"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildFeatures {
@@ -30,9 +69,23 @@ android {
         jvmTarget = "17"
     }
 
+    signingConfigs {
+        if (cockpitSigningConfigured) {
+            create("persistentRelease") {
+                storeFile = file(cockpitSigningEnvironment.getValue("COCKPIT_SIGNING_STORE_FILE")!!)
+                storePassword = cockpitSigningEnvironment.getValue("COCKPIT_SIGNING_STORE_PASSWORD")
+                keyAlias = cockpitSigningEnvironment.getValue("COCKPIT_SIGNING_KEY_ALIAS")
+                keyPassword = cockpitSigningEnvironment.getValue("COCKPIT_SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (cockpitSigningConfigured) {
+                signingConfig = signingConfigs.getByName("persistentRelease")
+            }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
         }
     }
@@ -48,6 +101,12 @@ android {
         }
     }
 
+}
+
+tasks.configureEach {
+    if (name == "preReleaseBuild") {
+        dependsOn(checkCockpitReleaseSigning)
+    }
 }
 
 dependencies {

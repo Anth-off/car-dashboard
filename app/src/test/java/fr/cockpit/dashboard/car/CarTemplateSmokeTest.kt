@@ -11,9 +11,10 @@ import android.os.Looper
 import androidx.car.app.CarContext
 import androidx.car.app.HandshakeInfo
 import androidx.car.app.Screen
+import androidx.car.app.OnDoneCallback
+import androidx.car.app.serialization.Bundleable
 import androidx.car.app.model.Action
 import androidx.car.app.model.ActionStrip
-import androidx.car.app.model.ListTemplate
 import androidx.car.app.model.PaneTemplate
 import androidx.car.app.model.Template
 import androidx.car.app.navigation.model.Maneuver
@@ -25,10 +26,12 @@ import androidx.car.app.testing.TestScreenManager
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
 import fr.cockpit.dashboard.destinations.Destination
+import fr.cockpit.dashboard.destinations.DestinationRepository
 import fr.cockpit.dashboard.navigation.GeoPoint
 import fr.cockpit.dashboard.navigation.NavigationState
 import fr.cockpit.dashboard.navigation.NavigationRepository
 import fr.cockpit.dashboard.navigation.RouteStep
+import fr.cockpit.dashboard.navigation.Route
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -47,19 +50,19 @@ class CarTemplateSmokeTest {
     @Test
     fun allScreensBuildValidTemplatesOnOlderAndNewerHosts() = onMain {
         listOf(1, 7).forEach { api ->
-            val destinations = render(DestinationListScreen(carContext(api))) as ListTemplate
-            assertTrue(destinations.singleList!!.items.size >= 2)
+            val destinations = render(DestinationListScreen(carContext(api))) as PaneTemplate
+            assertEquals(2, destinations.pane.rows.size)
 
             val destination = Destination("test", "Lieu de test", 48.8566, 2.3522)
             val detail = render(DestinationScreen(carContext(api), destination)) as PaneTemplate
             assertEquals(1, detail.pane.actions.size)
 
             val trip = render(TripScreen(carContext(api))) as PaneTemplate
-            assertEquals(4, trip.pane.rows.size)
+            assertEquals(2, trip.pane.rows.size)
             assertEquals(2, trip.pane.actions.size)
 
             val music = render(MusicScreen(carContext(api))) as PaneTemplate
-            assertEquals(3, music.pane.rows.size)
+            assertEquals(2, music.pane.rows.size)
 
             val navigationContext = carContext(api)
             NavigationRepository.get(navigationContext).stop()
@@ -72,9 +75,122 @@ class CarTemplateSmokeTest {
                 assertNotNull(navigation.panModeDelegate)
             }
 
-            val options = render(NavigationOptionsScreen(carContext(api), {}, { false })) as ListTemplate
-            assertEquals(6, options.singleList!!.items.size)
+            val options = render(NavigationOptionsScreen(carContext(api), {}, { false })) as PaneTemplate
+            assertEquals(2, options.pane.rows.size)
+            assertEquals(2, options.pane.actions.size)
+            assertEquals(2, options.actionStrip!!.actions.size)
+
+            val weather = render(WeatherScreen(carContext(api))) as PaneTemplate
+            assertEquals(2, weather.pane.rows.size)
+
+            val routeChoices = render(RouteChoicesScreen(carContext(api), { false }, {})) as PaneTemplate
+            assertEquals(2, routeChoices.pane.rows.size)
         }
+    }
+
+    @Test
+    fun allFavoritesCanBeBrowsedInBothDirectionsWithoutGrowingTheCard() = onMain {
+        listOf(1, 7).forEach { api ->
+            val context = carContext(api)
+            val repository = DestinationRepository.get(context)
+            val saved = repository.state.value.toList()
+            saved.forEach { repository.remove(it.id) }
+            try {
+                repeat(25) { index -> repository.add("Lieu ${index + 1}", 48.0 + index / 100.0, 2.0) }
+                val screen = DestinationListScreen(context)
+                val controller = ScreenController(screen)
+                controller.moveToState(Lifecycle.State.CREATED)
+                try {
+                    var template = screen.onGetTemplate() as PaneTemplate
+                    repeat(25) { index ->
+                        assertEquals(2, template.pane.rows.size)
+                        assertEquals(listOf("Destination favorite", "Adresse"),
+                            template.pane.rows.map { it.title.toString() })
+                        assertEquals("${index + 1}/25 · Lieu ${index + 1}",
+                            template.pane.rows.first().texts.single().toString())
+                        assertEquals(2, template.pane.actions.size)
+                        assertEquals(2, template.actionStrip!!.actions.size)
+                        click(template.actionStrip!!.actions[1])
+                        template = screen.onGetTemplate() as PaneTemplate
+                    }
+                    assertEquals("1/25 · Lieu 1", template.pane.rows.first().texts.single().toString())
+                    click(template.actionStrip!!.actions[0])
+                    template = screen.onGetTemplate() as PaneTemplate
+                    assertEquals("25/25 · Lieu 25", template.pane.rows.first().texts.single().toString())
+
+                    // Deleting saved places while a later page is open must safely clamp its index.
+                    repository.state.value.drop(1).forEach { repository.remove(it.id) }
+                    template = screen.onGetTemplate() as PaneTemplate
+                    assertEquals("1/1 · Lieu 1", template.pane.rows.first().texts.single().toString())
+                    assertEquals(null, template.actionStrip)
+                } finally {
+                    controller.moveToState(Lifecycle.State.DESTROYED)
+                }
+            } finally {
+                repository.state.value.toList().forEach { repository.remove(it.id) }
+                saved.forEach(repository::addFavorite)
+            }
+        }
+    }
+
+    @Test
+    fun alternativeRoutesShowTimeDistanceAndSelectTheDisplayedRoute() = onMain {
+        val primary = Route(emptyList(), emptyList(), 12_500.0, 1_140.0, summary = "Avenue principale")
+        val alternative = Route(emptyList(), emptyList(), 9_200.0, 1_380.0, summary = "Par le centre")
+        val state = NavigationState(route = primary, routeOptions = listOf(primary, alternative))
+        var selected: Route? = null
+        var template = routeChoicesTemplate(state, 0, { selected = it }, {}, {}, {})
+        assertEquals(2, template.pane.rows.size)
+        assertEquals("1/2 · Avenue principale", template.pane.rows.first().texts.single().toString())
+        assertEquals("19 min · 12,5 km · Actuel", template.pane.rows[1].texts.single().toString())
+        assertEquals("Estimation sans trafic", template.pane.rows[1].title.toString())
+        assertEquals(2, template.actionStrip!!.actions.size)
+
+        template = routeChoicesTemplate(state, 1, { selected = it }, {}, {}, {})
+        assertEquals("2/2 · Par le centre", template.pane.rows.first().texts.single().toString())
+        assertEquals("23 min · 9,2 km", template.pane.rows[1].texts.single().toString())
+        click(template.pane.actions.first())
+        assertEquals(alternative, selected)
+    }
+
+    @Test
+    fun routeWarningsStayVisibleWhileThePreviousRouteStillExists() = onMain {
+        val route = Route(emptyList(), emptyList(), 12_500.0, 1_140.0, summary = "Avenue principale")
+        val initial = NavigationState(route = route, routeOptions = listOf(route))
+        val warning = "Position modifiée : choisissez à nouveau un trajet."
+        val error = "Position GPS trop ancienne : attendez un nouveau signal."
+        listOf(
+            initial.copy(routeWarning = warning) to warning,
+            initial.copy(routeWarning = warning, error = error) to error,
+            initial.copy(loading = true) to "Calcul en cours…",
+        ).forEach { (state, expected) ->
+            val template = routeChoicesTemplate(state, 0, {}, {}, {}, {})
+            assertEquals(2, template.pane.rows.size)
+            assertEquals(listOf("Itinéraire", "Estimation sans trafic"),
+                template.pane.rows.map { it.title.toString() })
+            assertEquals(expected, template.pane.rows[1].texts.single().toString())
+            assertTrue(template.pane.rows.first().texts.single().toString().contains("19 min"))
+            if (state.loading) assertTrue(template.pane.actions.none { it.title.toString() == "Choisir" })
+        }
+    }
+
+    @Test
+    fun externalTextCannotExpandCardsIntoParagraphs() {
+        val row = compactCarRow("Destination", "Très longue adresse\n".repeat(30))
+        assertEquals(1, row.texts.size)
+        val text = row.texts.single().toString()
+        assertTrue(text.length <= 72)
+        assertTrue(text.endsWith("…"))
+        assertTrue('\n' !in text)
+    }
+
+    private fun click(action: Action) {
+        var callbackError: Any? = null
+        action.onClickDelegate!!.sendClick(object : OnDoneCallback {
+            override fun onFailure(response: Bundleable) { callbackError = response }
+        })
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(null, callbackError)
     }
 
     @Test

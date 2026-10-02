@@ -3,10 +3,12 @@ package fr.cockpit.dashboard.map
 import android.content.Context
 import android.graphics.Canvas
 import android.util.AttributeSet
+import android.animation.ValueAnimator
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.View
+import android.view.animation.DecelerateInterpolator
 import fr.cockpit.dashboard.navigation.GeoPoint
 import kotlin.math.log2
 
@@ -32,6 +34,7 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
     private var routePoints: List<GeoPoint> = emptyList()
     private var desiredZoom = 15.5f
     private var freeCamera: MapCamera? = null
+    private var freeBearing: Float? = null
     private var following = true
     private var overview = false
     private var headingUp = false
@@ -39,6 +42,14 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
     private var scalingGesture = false
     private var framingDirty = true
     private var framedCamera: MapCamera? = null
+    private var navigationActive = false
+    private var locationFresh = true
+    private var speedKmh: Float? = null
+    private var distanceToTurnMeters: Double? = null
+    private var automaticZoom = true
+    private var displayedZoom = desiredZoom
+    private var displayedBearing = 0f
+    private var cameraAnimator: ValueAnimator? = null
 
     var onMapStateChanged: ((MapViewState) -> Unit)? = null
         set(value) {
@@ -90,30 +101,50 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
     }
 
     fun updateLocation(latitude: Double?, longitude: Double?, bearing: Float? = null) {
-        updateState(latitude, longitude, routePoints, bearing, accuracyMeters, destination, progressFraction)
+        updateState(latitude, longitude, routePoints, bearing, accuracyMeters, destination, progressFraction,
+            speedKmh, distanceToTurnMeters, navigationActive, locationFresh)
     }
 
     fun updateRoute(points: List<GeoPoint>) {
-        updateState(latitude, longitude, points, bearing, accuracyMeters, destination, progressFraction)
+        updateState(latitude, longitude, points, bearing, accuracyMeters, destination, progressFraction,
+            speedKmh, distanceToTurnMeters, navigationActive, locationFresh)
     }
 
     fun updateState(
         latitude: Double?, longitude: Double?, routePoints: List<GeoPoint>, bearing: Float? = null,
         accuracyMeters: Float? = null, destination: GeoPoint? = null, progressFraction: Float = 0f,
+        speedKmh: Float? = null, distanceToTurnMeters: Double? = null,
+        navigationActive: Boolean = false, locationFresh: Boolean = true,
     ) {
+        val enteringNavigation = navigationActive && !this.navigationActive
         val changed = this.latitude != latitude || this.longitude != longitude || this.routePoints != routePoints ||
             this.bearing != bearing || this.accuracyMeters != accuracyMeters || this.destination != destination ||
-            this.progressFraction != progressFraction
+            this.progressFraction != progressFraction || this.speedKmh != speedKmh ||
+            this.distanceToTurnMeters != distanceToTurnMeters || this.navigationActive != navigationActive ||
+            this.locationFresh != locationFresh
         this.latitude = latitude
         this.longitude = longitude
         this.routePoints = routePoints
         this.bearing = bearing
-        bearing?.takeIf(Float::isFinite)?.let { lastKnownBearing = it }
+        if (locationFresh) bearing?.takeIf(Float::isFinite)?.let { lastKnownBearing = ((it % 360) + 360) % 360 }
         this.accuracyMeters = accuracyMeters
         this.destination = destination
         this.progressFraction = progressFraction
+        this.speedKmh = speedKmh
+        this.distanceToTurnMeters = distanceToTurnMeters
+        this.navigationActive = navigationActive
+        this.locationFresh = locationFresh
+        if (enteringNavigation) {
+            following = true
+            overview = false
+            freeCamera = null
+            freeBearing = null
+            headingUp = true
+            automaticZoom = true
+        }
         if (changed) {
             framingDirty = true
+            updateCameraMotion()
             invalidate()
             notifyState()
         }
@@ -124,7 +155,9 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
 
     private fun zoomBy(amount: Float) {
         if (following) {
-            desiredZoom = (desiredZoom + amount).coerceIn(MapProjection.MIN_ZOOM, MapProjection.MAX_ZOOM)
+            automaticZoom = false
+            desiredZoom = (displayedZoom + amount).coerceIn(MapProjection.MIN_ZOOM, MapProjection.MAX_ZOOM)
+            updateCameraMotion()
             invalidate()
             notifyState()
         } else {
@@ -132,11 +165,14 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         }
     }
 
-    /** Resume GPS following; an overview never overwrites the driver's preferred follow zoom. */
+    /** Resume GPS following and the adaptive guidance zoom after inspecting the map. */
     fun recenter() {
         following = true
         overview = false
         freeCamera = null
+        freeBearing = null
+        automaticZoom = true
+        updateCameraMotion()
         invalidate()
         notifyState()
     }
@@ -146,6 +182,8 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         following = false
         overview = true
         freeCamera = null
+        freeBearing = null
+        updateCameraMotion()
         invalidate()
         notifyState()
     }
@@ -153,6 +191,8 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
     fun setHeadingUp(value: Boolean) {
         if (headingUp == value) return
         headingUp = value
+        if (!following && !overview) freeBearing = if (value) lastKnownBearing ?: 0f else 0f
+        updateCameraMotion()
         invalidate()
         notifyState()
     }
@@ -170,7 +210,10 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
 
     private fun currentCamera(): MapCamera? {
         if (overview) return routeCamera()
-        return if (following) location()?.let { MapCamera(it, desiredZoom) }
+        return if (following) location()?.let {
+            if (navigationActive) DrivingMapCamera.follow(it, displayedZoom, width, height, density, mapBearing())
+            else MapCamera(it, displayedZoom)
+        }
             ?: routeCamera()
         else freeCamera
     }
@@ -183,12 +226,48 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         return framedCamera
     }
 
-    private fun mapBearing(): Float = if (headingUp && !overview) lastKnownBearing ?: 0f else 0f
+    private fun mapBearing(): Float = if (headingUp && !overview) freeBearing ?: displayedBearing else 0f
+
+    private fun updateCameraMotion() {
+        // No dead reckoning: when a fix goes stale, stop camera animation at the last real fix.
+        // The renderer also receives the original coordinates, never a smoothed vehicle position.
+        cameraAnimator?.cancel()
+        cameraAnimator = null
+        val targetZoom = when {
+            navigationActive && automaticZoom && !locationFresh -> displayedZoom
+            navigationActive && automaticZoom -> DrivingMapCamera.recommendedZoom(speedKmh, distanceToTurnMeters)
+            else -> desiredZoom
+        }
+        val targetBearing = if (headingUp && !overview) lastKnownBearing ?: 0f else 0f
+        val initialZoom = displayedZoom
+        val initialBearing = displayedBearing
+        if (!isAttachedToWindow || !following || !locationFresh ||
+            (kotlin.math.abs(targetZoom - initialZoom) < .02f &&
+                DrivingMapCamera.bearingDifference(initialBearing, targetBearing) < .5f)) {
+            displayedZoom = targetZoom
+            displayedBearing = targetBearing
+            return
+        }
+        cameraAnimator = ValueAnimator.ofFloat(0f, 1f).apply {
+            duration = 360L
+            interpolator = DecelerateInterpolator()
+            addUpdateListener { animation ->
+                val fraction = animation.animatedValue as Float
+                displayedZoom = initialZoom + (targetZoom - initialZoom) * fraction
+                displayedBearing = DrivingMapCamera.interpolateBearing(initialBearing, targetBearing, fraction)
+                postInvalidateOnAnimation()
+            }
+            start()
+        }
+    }
 
     private fun setFreeCamera(camera: MapCamera) {
+        if (following || overview) freeBearing = mapBearing()
         freeCamera = camera
         following = false
         overview = false
+        cameraAnimator?.cancel()
+        cameraAnimator = null
         invalidate()
         notifyState()
     }
@@ -211,7 +290,7 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         renderer?.render(canvas, width, height, latitude, longitude, routePoints, bearing,
             camera = currentCamera(), headingUp = headingUp && !overview, nightMode = nightMode,
             accuracyMeters = accuracyMeters, destination = destination, progressFraction = progressFraction,
-            orientationBearing = lastKnownBearing)
+            orientationBearing = mapBearing(), locationFresh = locationFresh)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
@@ -234,6 +313,8 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
     }
 
     override fun onDetachedFromWindow() {
+        cameraAnimator?.cancel()
+        cameraAnimator = null
         renderer?.close()
         renderer = null
         super.onDetachedFromWindow()

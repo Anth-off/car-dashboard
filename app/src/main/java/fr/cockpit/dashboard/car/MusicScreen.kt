@@ -8,7 +8,6 @@ import androidx.car.app.model.ActionStrip
 import androidx.car.app.model.CarIcon
 import androidx.car.app.model.Pane
 import androidx.car.app.model.PaneTemplate
-import androidx.car.app.model.Row
 import androidx.car.app.model.Template
 import androidx.car.app.CarToast
 import androidx.core.graphics.drawable.IconCompat
@@ -23,31 +22,15 @@ internal class MusicScreen(carContext: CarContext) : LiveCarScreen(carContext) {
 
     override fun onGetTemplate(): Template {
         val state = music.state.value
+        val playback = when {
+            !state.connected -> "Ouvrez Apple Music sur le téléphone"
+            state.playing -> "En cours"
+            else -> "En pause"
+        }
+        val artist = state.artist.takeIf { it.isNotBlank() }
         val pane = Pane.Builder()
-            .addRow(
-                Row.Builder()
-                    .setTitle("Morceau")
-                    .addText(state.title?.takeIf { it.isNotBlank() } ?: "Aucun morceau disponible")
-                    .build()
-            )
-            .addRow(
-                Row.Builder()
-                    .setTitle("Artiste")
-                    .addText(state.artist?.takeIf { it.isNotBlank() } ?: "—")
-                    .build()
-            )
-            .addRow(
-                Row.Builder()
-                    .setTitle("Lecture")
-                    .addText(
-                        when {
-                            !state.connected -> "Ouvrez Apple Music et configurez l’accès sur le téléphone, à l’arrêt."
-                            state.playing -> "En cours"
-                            else -> "En pause"
-                        }
-                    )
-                    .build()
-            )
+            .addRow(compactCarRow("Morceau", state.title.takeIf { it.isNotBlank() } ?: "Aucun morceau disponible"))
+            .addRow(compactCarRow("Lecture", listOfNotNull(artist, playback).joinToString(" · ")))
 
         if (state.connected && state.canPlayPause) {
             pane.addAction(

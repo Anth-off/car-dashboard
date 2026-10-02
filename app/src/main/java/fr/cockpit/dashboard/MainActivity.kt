@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                     onStopNavigation = { navigation.stop() },
                     onReroute = { navigation.reroute() },
                     onVoiceEnabled = navigation::setVoiceEnabled,
+                    onSelectRoute = { navigation.selectRoute(it) },
                     onMusic = {
                         if (!music.hasAccess()) settingsOpen = true
                         else if (!music.launchAppleMusic()) message("Apple Music n’est pas installé sur ce téléphone.")
@@ -126,7 +127,7 @@ class MainActivity : ComponentActivity() {
                     AlertDialog(
                         onDismissRequest = { navigationConsent = null },
                         title = { Text("Navigation en ligne") },
-                        text = { Text("La carte utilise OpenStreetMap. Le calcul d’itinéraire envoie votre position et la destination au serveur public de démonstration OSRM. Cette première version n’intègre ni trafic en direct ni cartes hors ligne.") },
+                        text = { Text("Votre position et l’arrivée sont envoyées à OSRM pour calculer le trajet. Carte OpenStreetMap. Sans trafic en direct ni guidage hors ligne.") },
                         confirmButton = { TextButton(onClick = {
                             getSharedPreferences("navigation_preferences", MODE_PRIVATE).edit()
                                 .putBoolean("provider_acknowledged", true).apply()

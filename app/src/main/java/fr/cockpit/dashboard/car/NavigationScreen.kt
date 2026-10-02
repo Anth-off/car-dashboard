@@ -22,6 +22,7 @@ import androidx.core.graphics.drawable.IconCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import fr.cockpit.dashboard.map.MapCamera
+import fr.cockpit.dashboard.map.DrivingMapCamera
 import fr.cockpit.dashboard.map.MapProjection
 import fr.cockpit.dashboard.map.RouteMapRenderer
 import fr.cockpit.dashboard.navigation.GeoPoint
@@ -43,6 +44,9 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
     private var visibleArea: Rect? = null
     private var stableArea: Rect? = null
     private var camera: MapCamera? = null
+    private var customCameraBearing = 0f
+    private var followZoom: Float? = null
+    private var lastCourse = 0f
     private var visible = false
     private val zoomInIcon by lazy { symbolIcon("+") }
     private val zoomOutIcon by lazy { symbolIcon("−") }
@@ -80,7 +84,9 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         override fun onScroll(distanceX: Float, distanceY: Float) {
             if (!distanceX.isFinite() || !distanceY.isFinite()) return
             val current = currentCamera() ?: return
-            camera = MapProjection.pan(current, distanceX, distanceY, surfaceDensity)
+            val orientation = mapOrientation()
+            camera = MapProjection.pan(current, distanceX, distanceY, surfaceDensity, orientation)
+            customCameraBearing = orientation
             drawMap()
         }
 
@@ -92,8 +98,10 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
             // A host may supply -1 when it cannot identify the gesture's focal point.
             val x = if (focusX.isFinite() && focusX >= 0f) focusX - area.left else area.width() / 2f
             val y = if (focusY.isFinite() && focusY >= 0f) focusY - area.top else area.height() / 2f
+            val orientation = mapOrientation()
             camera = MapProjection.zoomAt(current, current.zoom + log2(scaleFactor),
-                x, y, area.width(), area.height(), surfaceDensity)
+                x, y, area.width(), area.height(), surfaceDensity, orientation)
+            customCameraBearing = orientation
             drawMap()
         }
     }
@@ -150,7 +158,6 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
                 .setText(state.instruction).build()
             state.active || state.arrived -> RoutingInfo.Builder()
                 .setCurrentStep(carStep(state), carDistance(state.distanceToTurnMeters ?: 0.0))
-                .apply { state.followingStep?.let { setNextStep(carRouteStep(it)) } }
                 .build()
             else -> {
                 val message = state.error
@@ -216,20 +223,25 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
             val longitude = if (guidance.isSimulation) guidance.currentPosition?.longitude else position.longitude
             // Fill all visible space, while positioning the GPS marker in the stable area. This
             // keeps the map large and stops host controls appearing over the vehicle marker.
+            val orientation = mapOrientation()
             val mapCamera = currentCamera()?.let {
                 MapProjection.pan(it, area.exactCenterX() - safeArea.exactCenterX(),
-                    area.exactCenterY() - safeArea.exactCenterY(), surfaceDensity)
+                    area.exactCenterY() - safeArea.exactCenterY(), surfaceDensity, orientation)
             }
             map.render(
                 canvas, area.width(), area.height(), latitude, longitude,
                 guidance.route?.points.orEmpty(),
                 bearing = if (guidance.isSimulation) null else position.bearingDegrees,
                 camera = mapCamera,
+                headingUp = orientation != 0f,
+                orientationBearing = orientation,
                 nightMode = carContext.isDarkMode,
                 accuracyMeters = if (guidance.isSimulation) null else position.accuracyMeters,
                 destination = guidance.destination?.let { GeoPoint(it.latitude, it.longitude) },
                 progressFraction = guidance.progressFraction.toFloat(),
                 densityOverride = surfaceDensity,
+                locationFresh = guidance.isSimulation || (position.recording && position.error == null &&
+                    position.lastFixEpochMillis?.let { System.currentTimeMillis() - it in 0L..7_000L } == true),
             )
             val infoSaved = canvas.save()
             canvas.translate((safeArea.left - area.left).toFloat(), (safeArea.top - area.top).toFloat())
@@ -260,20 +272,42 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         val position = trip.state.value
         val point = if (guidance.isSimulation) guidance.currentPosition
             else position.latitude?.let { latitude -> position.longitude?.let { GeoPoint(latitude, it) } }
-        return point?.takeIf(MapProjection::isValid)?.let { MapCamera(it, map.zoom.toFloat()) }
+        return point?.takeIf(MapProjection::isValid)?.let {
+            val zoom = followZoom ?: if (guidance.active)
+                DrivingMapCamera.recommendedZoom(position.speedKmh, guidance.distanceToTurnMeters)
+            else map.zoom.toFloat()
+            if (guidance.active) {
+                val area = mapViewport()
+                DrivingMapCamera.follow(it, zoom,
+                    area.width().takeIf { width -> width > 0 } ?: lastMapWidth,
+                    area.height().takeIf { height -> height > 0 } ?: lastMapHeight,
+                    surfaceDensity, mapOrientation())
+            } else MapCamera(it, zoom)
+        }
+    }
+
+    /** Manual inspection freezes orientation; the overview remains north-up. */
+    private fun mapOrientation(): Float {
+        if (camera != null) return customCameraBearing
+        val guidance = navigation.state.value
+        if (!guidance.active || guidance.isSimulation) return 0f
+        trip.state.value.bearingDegrees?.takeIf(Float::isFinite)?.let { lastCourse = it }
+        return lastCourse
     }
 
     private fun changeZoom(delta: Int) {
         val custom = camera
         if (custom != null) camera = custom.copy(zoom = (custom.zoom + delta)
             .coerceIn(MapProjection.MIN_ZOOM, MapProjection.MAX_ZOOM))
-        else map.zoom = (map.zoom + delta)
-            .coerceIn(MapProjection.MIN_ZOOM.toInt(), MapProjection.MAX_ZOOM.toInt())
+        else followZoom = ((currentCamera()?.zoom ?: map.zoom.toFloat()) + delta)
+            .coerceIn(MapProjection.MIN_ZOOM, MapProjection.MAX_ZOOM)
         drawMap()
     }
 
     private fun recenter() {
         camera = null
+        followZoom = null
+        customCameraBearing = 0f
         drawMap()
     }
 
@@ -286,6 +320,7 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         val height = area.height().takeIf { it > 0 } ?: lastMapHeight
         val overview = MapProjection.fitRoute(points, width, height, surfaceDensity) ?: return false
         camera = overview
+        customCameraBearing = 0f
         drawMap()
         return true
     }

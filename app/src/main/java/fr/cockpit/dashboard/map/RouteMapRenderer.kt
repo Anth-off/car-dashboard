@@ -13,6 +13,7 @@ import android.graphics.Typeface
 import fr.cockpit.dashboard.navigation.GeoPoint
 import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.floor
 import kotlin.math.log10
@@ -25,15 +26,15 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
     private var density = defaultDensity
     private val tileStore = MapTileStore(context, onInvalidate)
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    private val background = Color.rgb(21, 31, 34)
-    private val cyan = Color.rgb(103, 224, 239)
+    private val background = Color.rgb(20, 29, 39)
+    private val cyan = Color.rgb(84, 190, 255)
     private val nightFilter = ColorMatrixColorFilter(ColorMatrix(floatArrayOf(
         -.24f, -.49f, -.07f, 0f, 230f,
         -.24f, -.49f, -.07f, 0f, 241f,
         -.24f, -.49f, -.07f, 0f, 244f,
         0f, 0f, 0f, 1f, 0f,
     )))
-    private val dayFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(.68f) })
+    private val dayFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(.48f) })
     private var closed = false
     private var lastBearing: Float? = null
     private var framedRoute: List<GeoPoint>? = null
@@ -41,6 +42,8 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
     private var framedHeight = 0
     private var framedDensity = 0f
     private var framedCamera: MapCamera? = null
+    private var projectedRouteSource: List<GeoPoint>? = null
+    private var projectedRoute: List<WorldPoint> = emptyList()
 
     var zoom: Int = 15
         set(value) {
@@ -67,12 +70,13 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
         progressFraction: Float = 0f,
         densityOverride: Float? = null,
         orientationBearing: Float? = null,
+        locationFresh: Boolean = true,
     ) {
         if (closed || width <= 0 || height <= 0) return
         density = densityOverride?.takeIf { it.isFinite() && it > 0 }?.coerceIn(.75f, 3f) ?: defaultDensity
         val saved = canvas.save()
         canvas.clipRect(0, 0, width, height)
-        canvas.drawColor(if (nightMode) background else Color.rgb(232, 237, 230))
+        canvas.drawColor(if (nightMode) background else Color.rgb(236, 239, 242))
         val fix = if (latitude != null && longitude != null) GeoPoint(latitude, longitude).takeIf(MapProjection::isValid) else null
         val viewport = camera?.takeIf { MapProjection.isValid(it.center) && it.zoom.isFinite() }
             ?: fix?.let { MapCamera(it, zoom.toFloat()) }
@@ -125,7 +129,7 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
             val bitmap = tileStore.tile(TileKey(tileZoom, Math.floorMod(x, tileCount), y))
             paint.reset()
             if (bitmap == null) {
-                paint.color = if (nightMode) Color.rgb(35, 47, 49) else Color.rgb(210, 219, 207)
+                paint.color = if (nightMode) Color.rgb(35, 45, 57) else Color.rgb(219, 226, 234)
                 paint.style = Paint.Style.STROKE
                 paint.strokeWidth = 1f
                 canvas.drawRect(rect, paint)
@@ -143,8 +147,15 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
         }
         val path = Path()
         var previousX: Float? = null
-        routePoints.filter(MapProjection::isValid).forEach { point ->
-            val (x, y) = screen(point)
+        // GPS/camera frames reuse projected geometry instead of repeating Mercator logarithms
+        // for every point of a long journey. The route list is immutable in NavigationState.
+        if (projectedRouteSource !== routePoints) {
+            projectedRouteSource = routePoints
+            projectedRoute = routePoints.filter(MapProjection::isValid).map { MapProjection.project(it, 1.0) }
+        }
+        projectedRoute.forEach { point ->
+            val x = (MapProjection.wrappedDelta(point.x * world, center.x, world) + width / 2).toFloat()
+            val y = (point.y * world - top).toFloat()
             if (previousX == null || abs(x - previousX!!) > world / 2) path.moveTo(x, y) else path.lineTo(x, y)
             previousX = x
         }
@@ -178,7 +189,7 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
                 paint.color = Color.argb(65, 99, 225, 240)
                 canvas.drawCircle(x, y, radius, paint)
             }
-            drawPosition(canvas, x, y, bearing)
+            drawPosition(canvas, x, y, bearing, locationFresh)
         }
         canvas.restoreToCount(rotated)
         if (drawnTiles == 0) {
@@ -212,25 +223,52 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
         paint.style = Paint.Style.STROKE
         paint.strokeJoin = Paint.Join.ROUND
         paint.strokeCap = Paint.Cap.ROUND
-        paint.strokeWidth = 12f * density
-        paint.color = Color.argb(100, 4, 17, 22)
+        paint.strokeWidth = 14f * density
+        paint.color = Color.argb(65, 4, 17, 34)
         canvas.drawPath(route, paint)
         paint.strokeWidth = 8f * density
-        paint.color = if (nightMode) Color.rgb(112, 137, 144) else Color.rgb(156, 168, 168)
+        paint.color = if (nightMode) Color.rgb(103, 118, 138) else Color.rgb(175, 184, 197)
         canvas.drawPath(route, paint)
         val remaining = if (progressFraction.isFinite() && progressFraction > 0f) {
             val measure = PathMeasure(route, false)
             Path().also { measure.getSegment(measure.length * progressFraction.coerceIn(0f, 1f), measure.length, it, true) }
         } else route
-        paint.strokeWidth = 9f * density
-        paint.color = if (nightMode) Color.rgb(13, 87, 107) else Color.WHITE
+        paint.strokeWidth = 11f * density
+        paint.color = if (nightMode) Color.rgb(31, 86, 146) else Color.WHITE
         canvas.drawPath(remaining, paint)
-        paint.strokeWidth = 5f * density
-        paint.color = if (nightMode) cyan else Color.rgb(0, 120, 165)
+        paint.strokeWidth = 7f * density
+        paint.color = if (nightMode) cyan else Color.rgb(40, 111, 237)
         canvas.drawPath(remaining, paint)
-        paint.strokeWidth = 1.5f * density
-        paint.color = if (nightMode) Color.rgb(183, 248, 250) else Color.rgb(103, 224, 239)
+        paint.strokeWidth = 2f * density
+        paint.color = if (nightMode) Color.rgb(133, 218, 255) else Color.rgb(94, 165, 255)
         canvas.drawPath(remaining, paint)
+        drawRouteArrows(canvas, remaining, nightMode)
+    }
+
+    /** A bounded number of chevrons makes the direction legible without an animation loop. */
+    private fun drawRouteArrows(canvas: Canvas, remaining: Path, nightMode: Boolean) {
+        val measure = PathMeasure(remaining, false)
+        val step = 128f * density
+        val position = FloatArray(2)
+        val tangent = FloatArray(2)
+        paint.strokeWidth = 2f * density
+        paint.strokeJoin = Paint.Join.ROUND
+        paint.color = if (nightMode) Color.rgb(220, 247, 255) else Color.rgb(224, 238, 255)
+        val chevron = Path().apply {
+            moveTo(-3.5f * density, 4f * density)
+            lineTo(0f, -3f * density)
+            lineTo(3.5f * density, 4f * density)
+        }
+        for (index in 0 until 24) {
+            val distance = (index + .6f) * step
+            if (distance >= measure.length) break
+            if (!measure.getPosTan(distance, position, tangent)) continue
+            val saved = canvas.save()
+            canvas.translate(position[0], position[1])
+            canvas.rotate((atan2(tangent[1], tangent[0]) * 180 / PI + 90).toFloat())
+            canvas.drawPath(chevron, paint)
+            canvas.restoreToCount(saved)
+        }
     }
 
     private fun drawDestination(canvas: Canvas, x: Float, y: Float, angle: Float) {
@@ -253,23 +291,25 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
         paint.strokeJoin = Paint.Join.ROUND
         canvas.drawPath(pin, paint)
         paint.style = Paint.Style.FILL
-        paint.color = Color.rgb(181, 243, 110)
+        paint.color = Color.rgb(255, 111, 103)
         canvas.drawPath(pin, paint)
-        paint.color = Color.rgb(23, 45, 34)
+        paint.color = Color.rgb(255, 248, 244)
         canvas.drawRoundRect(RectF(x - 5f * density, y - 29f * density, x + 5f * density, y - 19f * density), 2f * density, 2f * density, paint)
         canvas.restoreToCount(saved)
     }
 
-    private fun drawPosition(canvas: Canvas, x: Float, y: Float, bearing: Float?) {
+    private fun drawPosition(canvas: Canvas, x: Float, y: Float, bearing: Float?, locationFresh: Boolean) {
         paint.reset()
         paint.isAntiAlias = true
-        paint.color = Color.argb(35, 103, 224, 239)
-        canvas.drawCircle(x, y, 27f * density, paint)
-        paint.color = Color.argb(45, 103, 224, 239)
-        canvas.drawCircle(x, y, 20f * density, paint)
+        val vehicleColor = if (locationFresh) Color.rgb(35, 112, 246) else Color.rgb(120, 131, 147)
+        paint.color = if (locationFresh) Color.argb(22, 77, 155, 255) else Color.argb(25, 136, 147, 162)
+        canvas.drawCircle(x, y, 29f * density, paint)
+        paint.color = if (locationFresh) Color.argb(38, 77, 155, 255) else Color.argb(38, 136, 147, 162)
+        canvas.drawCircle(x, y, 21f * density, paint)
+        paint.color = Color.argb(65, 6, 23, 47)
+        canvas.drawCircle(x, y + 2f * density, 13f * density, paint)
         paint.color = Color.WHITE
-        canvas.drawCircle(x, y, 12f * density, paint)
-        if (bearing != null && bearing.isFinite()) {
+        if (locationFresh && bearing != null && bearing.isFinite()) {
             val save = canvas.save()
             canvas.rotate(bearing, x, y)
             val arrow = Path().apply {
@@ -280,15 +320,24 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
                 close()
             }
             paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 4f * density
+            paint.strokeWidth = 4.5f * density
             paint.strokeJoin = Paint.Join.ROUND
             canvas.drawPath(arrow, paint)
             paint.style = Paint.Style.FILL
-            paint.color = Color.rgb(19, 116, 145)
+            paint.color = vehicleColor
             canvas.drawPath(arrow, paint)
+            val highlight = Path().apply {
+                moveTo(x, y - 12f * density)
+                lineTo(x, y + 1f * density)
+                lineTo(x - 6f * density, y + 5f * density)
+                close()
+            }
+            paint.color = Color.rgb(133, 195, 255)
+            canvas.drawPath(highlight, paint)
             canvas.restoreToCount(save)
         } else {
-            paint.color = Color.rgb(19, 116, 145)
+            canvas.drawCircle(x, y, 12f * density, paint)
+            paint.color = vehicleColor
             canvas.drawCircle(x, y, 8f * density, paint)
         }
     }

@@ -3,10 +3,8 @@ package fr.cockpit.dashboard.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -14,10 +12,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,182 +55,174 @@ data class DashboardData(
     val bearing: Float? = null, val accuracyMeters: Float? = null,
 )
 
+/** Every dashboard control stays in one viewport; the map receives all remaining space. */
 @Composable
 fun Dashboard(
     data: DashboardData, onTracking: () -> Unit, onReset: () -> Unit,
     onSettings: () -> Unit, onDestinations: () -> Unit, onStopNavigation: () -> Unit, onReroute: () -> Unit,
     onMusic: () -> Unit, onPlayPause: () -> Unit, onPrevious: () -> Unit, onNext: () -> Unit,
     onVoiceEnabled: (Boolean) -> Unit = {},
+    onSelectRoute: (fr.cockpit.dashboard.navigation.Route) -> Boolean = { false },
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(Ink).safeDrawingPadding()) {
-        val wide = maxWidth >= 740.dp
-        val compactLandscape = wide && maxHeight < 550.dp
-        val mapHeight = if (compactLandscape) (maxHeight - 28.dp).coerceAtLeast(220.dp)
-            else if (wide) (maxHeight - 100.dp).coerceAtLeast(460.dp) else 540.dp
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())
-            .padding(horizontal = if (wide) 24.dp else 16.dp, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            if (!compactLandscape) Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(38.dp).clip(RoundedCornerShape(12.dp)).background(Lime), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Route, null, tint = Ink, modifier = Modifier.size(24.dp))
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("COCKPIT", color = Mist, fontWeight = FontWeight.Bold, fontSize = 20.sp, letterSpacing = 3.sp)
-                    Text("Le plaisir de prendre la route.", color = Muted, fontSize = 11.sp)
-                }
-                IconButton(onClick = onSettings, modifier = Modifier.background(Surface, CircleShape)) {
-                    Icon(Icons.Rounded.Tune, "Réglages et autorisations", tint = Mist)
+    BoxWithConstraints(Modifier.fillMaxSize().background(Ink).safeDrawingPadding()
+        .padding(8.dp).testTag("dashboard_viewport")) {
+        val viewportWidth = maxWidth
+        val landscape = maxWidth > maxHeight && maxWidth >= 600.dp
+        val largeText = LocalDensity.current.fontScale > 1.15f
+        val musicHeight = if (largeText) 116.dp else 108.dp
+        val metricsHeight = if (largeText) 128.dp else 116.dp
+        val header: @Composable () -> Unit = { DashboardHeader(data, onTracking, onSettings) }
+        val map: @Composable (Modifier) -> Unit = { modifier ->
+            NavigationPanel(data, onDestinations, onStopNavigation, onReroute, onTracking,
+                onVoiceEnabled, modifier.testTag("dashboard_map"), onSelectRoute)
+        }
+        val music: @Composable (Modifier) -> Unit = { modifier ->
+            MusicCard(data, onMusic, onPlayPause, onPrevious, onNext, modifier)
+        }
+        if (landscape) {
+            Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                map(Modifier.weight(1f).fillMaxHeight())
+                Column(Modifier.width(if (viewportWidth >= 1_000.dp) 320.dp else 280.dp).fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    header()
+                    DriveSummary(data, onReset, Modifier.weight(1f))
+                    music(Modifier.height(musicHeight))
                 }
             }
-            if (wide) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                    NavigationPanel(data, onDestinations, onStopNavigation, onReroute, onTracking, onVoiceEnabled,
-                        Modifier.weight(.68f).height(mapHeight))
-                    Column(Modifier.weight(.32f).then(if (compactLandscape)
-                        Modifier.height(mapHeight).verticalScroll(rememberScrollState()) else Modifier),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        if (compactLandscape) Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text("COCKPIT", Modifier.weight(1f), fontWeight = FontWeight.Bold, letterSpacing = 2.sp, fontSize = 14.sp)
-                            IconButton(onClick = onSettings) { Icon(Icons.Rounded.Tune, "Réglages et autorisations") }
-                        }
-                        DriveSummary(data, onReset, onTracking)
-                        MusicCard(data, onMusic, onPlayPause, onPrevious, onNext)
-                        CompactWeather(data, onSettings)
-                    }
-                }
-            } else {
-                NavigationPanel(data, onDestinations, onStopNavigation, onReroute, onTracking, onVoiceEnabled,
-                    Modifier.fillMaxWidth().height(mapHeight))
-                DriveSummary(data, onReset, onTracking)
-                MusicCard(data, onMusic, onPlayPause, onPrevious, onNext)
-                CompactWeather(data, onSettings)
+        } else {
+            Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                header()
+                map(Modifier.fillMaxWidth().weight(1f))
+                DriveSummary(data, onReset, Modifier.height(metricsHeight))
+                music(Modifier.height(musicHeight))
             }
         }
     }
 }
 
 @Composable
-private fun DriveSummary(data: DashboardData, onReset: () -> Unit, onTracking: () -> Unit) {
-    Panel {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow("MON TRAJET", Icons.Rounded.Speed)
-            Text(if (data.recording && data.speedKmh != null) "GPS ACTIF" else if (data.recording) "SIGNAL GPS…" else "EN PAUSE",
-                color = if (data.recording && data.speedKmh != null) Lime else Muted, fontSize = 9.sp)
+private fun DashboardHeader(data: DashboardData, onTracking: () -> Unit, onSettings: () -> Unit) {
+    Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(32.dp).clip(RoundedCornerShape(10.dp)).background(Lime),
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Rounded.Route, null, tint = Ink, modifier = Modifier.size(21.dp))
         }
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(vertical = 10.dp)) {
-            Text(data.speedKmh?.let { "%.0f".format(Locale.FRANCE, it) } ?: "—", fontSize = 64.sp,
-                fontWeight = FontWeight.Light, letterSpacing = (-3).sp)
-            Text("km/h", color = Muted, fontSize = 14.sp, modifier = Modifier.padding(start = 10.dp, bottom = 13.dp))
-            Spacer(Modifier.weight(1f))
-            FilledTonalIconButton(onClick = onTracking, modifier = Modifier.padding(bottom = 10.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (data.recording) SurfaceRaised else Lime,
-                    contentColor = if (data.recording) Mist else Ink)) {
-                Icon(if (data.recording) Icons.Rounded.Stop else Icons.Rounded.PlayArrow,
-                    if (data.recording) "Arrêter le suivi GPS" else "Démarrer le suivi GPS")
+        Spacer(Modifier.width(8.dp))
+        Column(Modifier.weight(1f)) {
+            Text("COCKPIT", fontWeight = FontWeight.Bold, fontSize = 13.sp, letterSpacing = 1.5.sp)
+            Text(when { data.recording && data.speedKmh != null -> "GPS ACTIF"
+                data.recording -> "SIGNAL GPS…"; else -> "GPS EN PAUSE" },
+                color = if (data.recording && data.speedKmh != null) Lime else Muted,
+                fontSize = 9.sp, maxLines = 1)
+        }
+        FilledTonalIconButton(onClick = onTracking, modifier = Modifier.size(48.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = if (data.recording) SurfaceRaised else Lime,
+                contentColor = if (data.recording) Mist else Ink)) {
+            Icon(if (data.recording) Icons.Rounded.Stop else Icons.Rounded.PlayArrow,
+                if (data.recording) "Arrêter le suivi GPS" else "Démarrer le suivi GPS")
+        }
+        Spacer(Modifier.width(4.dp))
+        IconButton(onClick = onSettings, modifier = Modifier.size(48.dp).background(Surface, CircleShape)) {
+            Icon(Icons.Rounded.Tune, "Réglages et autorisations")
+        }
+    }
+}
+
+@Composable
+private fun DriveSummary(data: DashboardData, onReset: () -> Unit, modifier: Modifier) {
+    Panel(modifier.testTag("dashboard_metrics")) {
+        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                FittedValue(data.speedKmh?.let { "%.0f".format(Locale.FRANCE, it) } ?: "—",
+                    Modifier.weight(1f).testTag("dashboard_speed"), 42.sp, FontWeight.Light)
+                Text("km/h", color = Muted, fontSize = 10.sp)
+            }
+            Column(Modifier.weight(1f).testTag("dashboard_weather"), horizontalAlignment = Alignment.End) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Rounded.WbCloudy, null, tint = Lime, modifier = Modifier.size(20.dp))
+                    Text(data.temperatureC?.let { "%.0f°".format(Locale.FRANCE, it) } ?: "—°", fontSize = 24.sp,
+                        modifier = Modifier.semantics { contentDescription = "Température extérieure" })
+                }
+                Text(data.weatherSummary.ifBlank { if (data.weatherEnabled) "Météo en attente" else "Météo désactivée" },
+                    color = Muted, fontSize = 10.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         HorizontalDivider(color = Muted.copy(alpha = .16f))
-        Row(Modifier.padding(top = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Column(Modifier.weight(1f)) {
-                Eyebrow("TOTAL GPS")
-                Spacer(Modifier.height(6.dp))
-                Distance(data.totalMeters)
+        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Distance(data.totalMeters, "TOTAL GPS", Modifier.weight(1f).testTag("dashboard_total"))
+            Distance(data.tripMeters, "TRAJET", Modifier.weight(1f).testTag("dashboard_trip"))
+            IconButton(onClick = onReset, enabled = !data.recording, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.RestartAlt,
+                    if (data.recording) "Réinitialiser le trajet après l’arrêt du suivi" else "Réinitialiser le trajet",
+                    tint = if (data.recording) Muted else Lime)
             }
-            Column(Modifier.weight(1f)) {
-                Eyebrow("TRAJET")
-                Spacer(Modifier.height(6.dp))
-                Distance(data.tripMeters)
-            }
-        }
-        TextButton(onClick = onReset, enabled = !data.recording, contentPadding = PaddingValues(0.dp)) {
-            Icon(Icons.Rounded.RestartAlt, null, Modifier.size(16.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(if (data.recording) "Réinitialisation à l’arrêt du suivi" else "Réinitialiser le trajet", fontSize = 11.sp)
-        }
-    }
-}
-
-@Composable
-private fun CompactWeather(data: DashboardData, onSettings: () -> Unit) {
-    Panel {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Icon(Icons.Rounded.WbCloudy, null, tint = Lime, modifier = Modifier.size(28.dp))
-            Column(Modifier.weight(1f)) {
-                Eyebrow("EXTÉRIEUR")
-                Text(data.weatherSummary.ifBlank { if (data.weatherEnabled) "En attente du GPS" else "Météo désactivée" },
-                    color = Muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            Text(data.temperatureC?.let { "%.0f°".format(Locale.FRANCE, it) } ?: "—°", fontSize = 30.sp)
-        }
-        if (!data.weatherEnabled) TextButton(onClick = onSettings, contentPadding = PaddingValues(0.dp)) {
-            Text("Activer la météo", fontSize = 11.sp)
-        } else data.weatherUpdatedAt?.let {
-            val minutes = ((System.currentTimeMillis() - it).coerceAtLeast(0) / 60_000)
-            Text(if (minutes < 1) "Actualisée à l’instant" else "Actualisée il y a $minutes min", color = Muted,
-                fontSize = 10.sp, modifier = Modifier.padding(top = 8.dp))
         }
     }
 }
 
 @Composable
 private fun Panel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Surface)
-        .border(1.dp, Color(0xFF2C342B), RoundedCornerShape(26.dp)).padding(22.dp), content = content)
+    Column(modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(Surface)
+        .border(1.dp, Color(0xFF2C342B), RoundedCornerShape(20.dp)).padding(horizontal = 12.dp, vertical = 4.dp),
+        content = content)
 }
 
 @Composable
-private fun Eyebrow(text: String, icon: ImageVector? = null) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-        if (icon != null) Icon(icon, null, Modifier.size(16.dp), tint = Muted)
-        Text(text, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.5.sp, color = Muted)
+private fun Distance(meters: Double, label: String, modifier: Modifier) {
+    val fmt = remember { NumberFormat.getNumberInstance(Locale.FRANCE).apply {
+        maximumFractionDigits = 1; minimumFractionDigits = 1
+    } }
+    Column(modifier) {
+        Text(label, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Muted, maxLines = 1)
+        FittedValue("${fmt.format(meters / 1000)} km", Modifier.fillMaxWidth(), 17.sp, FontWeight.Medium)
+    }
+}
+
+/** Keeps full odometer values visible instead of ellipsizing significant digits. */
+@Composable
+private fun FittedValue(text: String, modifier: Modifier, fontSize: TextUnit, weight: FontWeight) {
+    val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    BoxWithConstraints(modifier) {
+        val measured = measurer.measure(AnnotatedString(text), TextStyle(fontSize = fontSize, fontWeight = weight),
+            maxLines = 1, softWrap = false)
+        val available = with(density) { maxWidth.toPx() }
+        val scale = (available / measured.size.width.coerceAtLeast(1)).coerceAtMost(1f)
+        Text(text, color = Mist, fontWeight = weight, fontSize = (fontSize.value * scale).sp,
+            maxLines = 1, softWrap = false)
     }
 }
 
 @Composable
-private fun Distance(meters: Double) {
-    val fmt = remember { NumberFormat.getNumberInstance(Locale.FRANCE).apply { maximumFractionDigits = 1; minimumFractionDigits = 1 } }
-    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(fmt.format(meters / 1000), fontSize = 24.sp, color = Mist, fontWeight = FontWeight.Medium, maxLines = 1)
-        Text("km", fontSize = 11.sp, color = Muted, modifier = Modifier.padding(bottom = 3.dp))
-    }
-}
-
-@Composable
-private fun MusicCard(data: DashboardData, onMusic: () -> Unit, onPlayPause: () -> Unit, onPrevious: () -> Unit, onNext: () -> Unit) {
-    Panel {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-            Eyebrow("APPLE MUSIC", Icons.Rounded.MusicNote)
-            IconButton(onClick = onMusic, modifier = Modifier.size(28.dp)) {
-                Icon(Icons.Rounded.OpenInNew, "Ouvrir Apple Music", Modifier.size(17.dp), tint = Muted)
-            }
-        }
-        Spacer(Modifier.height(14.dp))
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            Box(Modifier.size(58.dp).clip(RoundedCornerShape(16.dp)).background(
-                Brush.linearGradient(listOf(Color(0xFF526444), Color(0xFF2B3628)))), contentAlignment = Alignment.Center) {
-                Icon(Icons.Rounded.GraphicEq, null, tint = Lime, modifier = Modifier.size(30.dp))
-            }
+private fun MusicCard(data: DashboardData, onMusic: () -> Unit, onPlayPause: () -> Unit,
+    onPrevious: () -> Unit, onNext: () -> Unit, modifier: Modifier) {
+    Panel(modifier.testTag("dashboard_music")) {
+        Row(Modifier.fillMaxWidth().weight(1f), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text(if (data.musicConnected) data.musicTitle.ifBlank { "Apple Music" } else "Votre bande-son",
-                    color = Mist, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(if (data.musicConnected) data.musicArtist.ifBlank { "Session Apple Music" } else "Lancez un morceau dans Apple Music",
-                    color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                Text(if (data.musicConnected) data.musicTitle.ifBlank { "Apple Music" } else "Apple Music",
+                    color = Mist, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (data.musicConnected) data.musicArtist.ifBlank { "Session Apple Music" } else "Lancez votre musique",
+                    color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onMusic, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Rounded.OpenInNew, "Ouvrir Apple Music", modifier = Modifier.size(20.dp), tint = Muted)
             }
         }
-        Spacer(Modifier.height(16.dp))
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Row(Modifier.fillMaxWidth().height(48.dp), horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onPrevious, enabled = data.canPrevious, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Rounded.SkipPrevious, "Morceau précédent", modifier = Modifier.size(28.dp))
             }
-            Spacer(Modifier.width(18.dp))
-            FilledIconButton(onClick = onPlayPause, enabled = data.canPlayPause, modifier = Modifier.size(52.dp),
+            FilledIconButton(onClick = onPlayPause, enabled = data.canPlayPause, modifier = Modifier.size(48.dp),
                 colors = IconButtonDefaults.filledIconButtonColors(containerColor = Lime, contentColor = Ink)) {
                 Icon(if (data.musicPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    if (data.musicPlaying) "Mettre en pause" else "Lire", modifier = Modifier.size(30.dp))
+                    if (data.musicPlaying) "Mettre en pause" else "Lire", modifier = Modifier.size(28.dp))
             }
-            Spacer(Modifier.width(18.dp))
             IconButton(onClick = onNext, enabled = data.canNext, modifier = Modifier.size(48.dp)) {
                 Icon(Icons.Rounded.SkipNext, "Morceau suivant", modifier = Modifier.size(28.dp))
             }

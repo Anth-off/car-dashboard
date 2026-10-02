@@ -31,6 +31,7 @@ class NavigationRepository private constructor(context: Context) {
     private var request: Job? = null
     private var requestGeneration = 0L
     private var requestedDestination: Destination? = null
+    private var routeOptionsOrigin: GeoPoint? = null
     private val reroutePolicy = AutomaticReroutePolicy()
     private var progress: RouteProgressEngine? = null
     private var lastSpeechKey: String? = null
@@ -55,7 +56,7 @@ class NavigationRepository private constructor(context: Context) {
         requestRoute(destination, automatic = false)
     }
 
-    private fun requestRoute(destination: Destination, automatic: Boolean) {
+    private fun requestRoute(destination: Destination, automatic: Boolean, selectionRefresh: Boolean = false) {
         request?.cancel()
         val generation = ++requestGeneration
         requestedDestination = destination
@@ -88,18 +89,13 @@ class NavigationRepository private constructor(context: Context) {
                     gpsPaused = false,
                     instruction = if (state.value.active) "Recalcul de l’itinéraire…" else "Calcul de l’itinéraire…",
                 )
-                val route = router.route(GeoPoint(telemetry.latitude!!, telemetry.longitude!!), destination)
+                val origin = GeoPoint(telemetry.latitude!!, telemetry.longitude!!)
+                val choices = router.routes(origin, destination,
+                    telemetry.bearingDegrees.takeIf { (telemetry.speedKmh ?: 0f) >= 10f })
                 ensureActive()
-                progress = RouteProgressEngine(route)
-                lastSpeechKey = null
-                lastConsumedFixTime = null
-                simulationDistance = 0.0
-                mutableState.value = NavigationState(
-                    active = true, destination = destination, route = route,
-                    instruction = "Itinéraire prêt", remainingMeters = route.totalMeters,
-                    remainingSeconds = route.totalSeconds.toLong(), voiceEnabled = state.value.voiceEnabled,
-                    isSimulation = simulationEnabled,
-                )
+                routeOptionsOrigin = origin
+                activateRoute(destination, choices.routes, 0, choices.warning,
+                    if (selectionRefresh) "Trajets actualisés depuis ta position : choisis à nouveau." else null)
                 DestinationRepository.get(applicationContext).recordVisit(destination)
                 reroutePolicy.requestFinished(success = true, SystemClock.elapsedRealtime())
                 if (simulationEnabled) simulateNextFix() else updateTelemetry(trips.state.value)
@@ -122,6 +118,51 @@ class NavigationRepository private constructor(context: Context) {
 
     fun reroute() { state.value.destination?.let(::start) }
 
+    /** Prefer the route overload in UIs: a button can outlive the request that produced its index. */
+    fun selectRoute(index: Int): Boolean = state.value.routeOptions.getOrNull(index)?.let(::selectRoute) ?: false
+
+    /** True only when the displayed choice is already active or was applied immediately. */
+    fun selectRoute(route: Route): Boolean {
+        val current = state.value
+        val index = current.routeOptions.indexOfFirst { it === route }
+        if (index < 0 || current.loading) return false
+        // Tapping the current choice must not rewind maneuvers, counters, or spoken guidance.
+        if (current.route === route) return true
+        val destination = current.destination ?: return false
+        val telemetry = trips.state.value
+        val fix = if (simulationEnabled) current.currentPosition else
+            if (hasFreshFix(telemetry)) GeoPoint(telemetry.latitude!!, telemetry.longitude!!) else null
+        if (fix == null) {
+            mutableState.value = current.copy(error = "Signal GPS récent nécessaire pour changer de trajet.")
+            return false
+        }
+        if (RouteOptionSelection.needsRefresh(routeOptionsOrigin, fix)) {
+            // These alternatives begin behind the car. Never reuse their index after recalculation:
+            // request a new set at the physical position and explicitly ask for a fresh choice.
+            requestRoute(destination, automatic = false, selectionRefresh = true)
+            return false
+        }
+        voice.stop()
+        activateRoute(destination, current.routeOptions, index, current.routeWarning)
+        if (simulationEnabled) simulateNextFix() else updateTelemetry(telemetry)
+        return true
+    }
+
+    private fun activateRoute(destination: Destination, choices: List<Route>, index: Int, warning: String?, notice: String? = null) {
+        val route = choices[index]
+        progress = RouteProgressEngine(route)
+        lastSpeechKey = null
+        lastConsumedFixTime = null
+        simulationDistance = 0.0
+        mutableState.value = NavigationState(
+            active = true, destination = destination, route = route,
+            instruction = "Itinéraire prêt", remainingMeters = route.totalMeters,
+            remainingSeconds = route.totalSeconds.toLong(), voiceEnabled = state.value.voiceEnabled,
+            isSimulation = simulationEnabled, routeOptions = choices, selectedRouteIndex = index,
+            routeWarning = warning, error = notice,
+        )
+    }
+
     fun stop() {
         request?.cancel()
         requestGeneration++
@@ -130,6 +171,7 @@ class NavigationRepository private constructor(context: Context) {
             voice.stop()
             progress = null
             requestedDestination = null
+            routeOptionsOrigin = null
             lastConsumedFixTime = null
             lastSpeechKey = null
             simulationEnabled = false

@@ -22,6 +22,8 @@ data class Route(
     val steps: List<RouteStep>,
     val totalMeters: Double,
     val totalSeconds: Double,
+    /** Main roads supplied by the router, useful when comparing alternatives. */
+    val summary: String = "",
 )
 
 data class NavigationState(
@@ -51,4 +53,9 @@ data class NavigationState(
     val gpsPaused: Boolean = false,
     /** A replacement route is being requested while the previous route remains available. */
     val rerouting: Boolean = false,
+    /** Genuine alternatives from the latest request, sorted by estimated duration without traffic. */
+    val routeOptions: List<Route> = emptyList(),
+    val selectedRouteIndex: Int = 0,
+    /** Explains a significant gap between the requested coordinate and the routable road. */
+    val routeWarning: String? = null,
 )
