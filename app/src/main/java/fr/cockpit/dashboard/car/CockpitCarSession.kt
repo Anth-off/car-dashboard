@@ -35,6 +35,10 @@ internal class CockpitCarSession : Session() {
 
     override fun onCreateScreen(intent: Intent): Screen {
         initialize()
+        if (carContext.carAppApiLevel >= 5) {
+            if (isNavigationIntent(intent)) acceptNavigationIntent(intent)
+            return ProjectedDashboardScreen(carContext)
+        }
         if (isNavigationIntent(intent)) {
             acceptNavigationIntent(intent)
             // Pre-seed the back stack so the map's Destinations action always has a real home.
@@ -49,6 +53,10 @@ internal class CockpitCarSession : Session() {
         if (!isNavigationIntent(intent)) return
         acceptNavigationIntent(intent)
         val screens = carContext.getCarService(androidx.car.app.ScreenManager::class.java)
+        if (carContext.carAppApiLevel >= 5) {
+            screens.popToRoot()
+            return
+        }
         if (screens.top !is NavigationScreen) screens.push(NavigationScreen(carContext))
     }
 

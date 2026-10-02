@@ -20,7 +20,7 @@ data class MapViewState(
     val zoom: Float = 15.5f,
 )
 
-/** Phone map with independent camera, focal-point pinch zoom and a persistent GPS marker. */
+/** Shared map with independent camera, focal-point pinch zoom and a persistent GPS marker. */
 class RouteMapView @JvmOverloads constructor(context: Context, attributes: AttributeSet? = null) : View(context, attributes) {
     private val density = context.resources.displayMetrics.density.coerceIn(1f, 2f)
     private var renderer: RouteMapRenderer? = null
@@ -60,6 +60,8 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
     val mapState: MapViewState
         get() = MapViewState(following, overview, headingUp, currentCamera()?.zoom ?: desiredZoom)
 
+    val isNightMode: Boolean get() = nightMode
+
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
             scalingGesture = true
@@ -67,11 +69,7 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         }
 
         override fun onScale(detector: ScaleGestureDetector): Boolean {
-            val camera = currentCamera() ?: return false
-            val factor = detector.scaleFactor.takeIf { it.isFinite() && it > 0f } ?: return false
-            setFreeCamera(MapProjection.zoomAt(camera, camera.zoom + log2(factor), detector.focusX, detector.focusY,
-                width, height, density, mapBearing()))
-            return true
+            return zoomAt(detector.focusX, detector.focusY, detector.scaleFactor)
         }
     })
 
@@ -80,16 +78,11 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
 
         override fun onScroll(first: MotionEvent?, current: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
             if (scalingGesture || scaleDetector.isInProgress) return true
-            val camera = currentCamera() ?: return false
-            setFreeCamera(MapProjection.pan(camera, distanceX, distanceY, density, mapBearing()))
-            return true
+            return panBy(distanceX, distanceY)
         }
 
         override fun onDoubleTap(event: MotionEvent): Boolean {
-            val camera = currentCamera() ?: return false
-            setFreeCamera(MapProjection.zoomAt(camera, camera.zoom + 1f, event.x, event.y,
-                width, height, density, mapBearing()))
-            return true
+            return zoomAt(event.x, event.y, 2f)
         }
 
         override fun onSingleTapConfirmed(event: MotionEvent): Boolean = performClick()
@@ -152,6 +145,28 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
 
     fun zoomIn() = zoomBy(1f)
     fun zoomOut() = zoomBy(-1f)
+
+    /** Scroll distances use the same pixel convention as Android Auto SurfaceCallback.onScroll. */
+    fun panBy(distanceX: Float, distanceY: Float): Boolean {
+        if (!distanceX.isFinite() || !distanceY.isFinite() || width <= 0 || height <= 0) return false
+        val camera = currentCamera() ?: return false
+        if (distanceX == 0f && distanceY == 0f) return true
+        setFreeCamera(MapProjection.pan(camera, distanceX, distanceY, density, mapBearing()))
+        return true
+    }
+
+    /** A car host may omit the focus with -1; use the map center in that case. */
+    fun zoomAt(focusX: Float, focusY: Float, scaleFactor: Float): Boolean {
+        if (!focusX.isFinite() || !focusY.isFinite() || !scaleFactor.isFinite() || scaleFactor <= 0f ||
+            width <= 0 || height <= 0) return false
+        val camera = currentCamera() ?: return false
+        if (scaleFactor == 1f) return true
+        val x = if (focusX < 0f) width / 2f else focusX.coerceIn(0f, width.toFloat())
+        val y = if (focusY < 0f) height / 2f else focusY.coerceIn(0f, height.toFloat())
+        setFreeCamera(MapProjection.zoomAt(camera, camera.zoom + log2(scaleFactor), x, y,
+            width, height, density, mapBearing()))
+        return true
+    }
 
     private fun zoomBy(amount: Float) {
         if (following) {

@@ -1,38 +1,50 @@
-Cockpit GPS 0.3.0 — vérification du 2 octobre 2026
+Cockpit GPS 0.4.0 — vérification du 2 octobre 2026
 
-INSTALLATION : nouvelle application Cockpit GPS (fr.cockpit.gps), versionCode 3. Elle s’installe à côté de Cockpit 0.2.0 (fr.cockpit.dashboard), sans désinstallation. La clé privée de la 0.2.0 a été perdue ; aucune mise à jour directe ni migration des compteurs/favoris vers Cockpit GPS n’est effectuée. La nouvelle clé de publication est conservée dans un dossier privé hors dépôt et une archive privée remise au propriétaire doit être sauvegardée hors de cet espace de travail.
+INSTALLATION : mise à jour de Cockpit GPS 0.3.0, même application fr.cockpit.gps, versionCode 4. La clé persistante de la 0.3 est réutilisée ; aucune nouvelle clé n’est créée. L’installation prévue se fait par-dessus la 0.3 sans désinstallation, avec conservation des compteurs, favoris et autorisations. Le propriétaire a confirmé le fonctionnement de la 0.3 sur son Samsung S23 dans Android Auto après installation avec KingInstaller. Le fonctionnement du nouveau dashboard 0.4 sur cet autoradio reste à vérifier.
 
-Publication GitHub v0.3.0 réussie, commit source 16aea40c703597e34929a2f7457e849260663fdd.
-Contrôles CI : run 36996727799 réussi ; publication : run 36997045759 réussi.
-APK téléchargé depuis le lien public et signature vérifiée ; SHA-256 d1900340bfbbcac8789e02a96732f5c831e73db1d9242d9da487a2daaffaa677.
+ÉTAT DES VÉRIFICATIONS 0.4
+- 92 tests JVM/Robolectric réussis, zéro échec et zéro erreur, lors de la validation finale après l’ajustement de hauteur de ligne.
+- Android Lint debug : aucune erreur.
+- Compilation finale des APK/AAB release signés : réussie.
+- Android Lint release : aucune erreur.
+- Signature de l’APK final 0.4 : vérifiée, conforme au certificat épinglé de la 0.3.
+- Signature de l’AAB final 0.4 : vérifiée, conforme au même certificat épinglé.
+- Publication GitHub 0.4 : non déclarée réussie à ce stade.
 
-Compilation des APK et AAB release signés : réussie.
-APK non débogable : fr.cockpit.gps, versionName 0.3.0, versionCode 3, libellé Cockpit GPS.
-Android Lint release : aucune erreur ; avertissements non bloquants.
-76 tests JVM/Robolectric réussis, dont :
-- CarTemplateSmokeTest : 9
-- DestinationRepositoryTest : 7
-- DrivingMapCameraTest : 5
-- MapProjectionTest : 6
-- AutomaticReroutePolicyTest : 7
-- NavigationRouteSelectionTest : 3
-- OsrmRoutingClientTest : 8
-- RouteOptionSelectionTest : 2
-- RouteProgressEngineTest : 6
-- DistanceAccumulatorTest : 7
-- DashboardViewportTest : 4
-- FixedDialogsTest : 5
-- MainActivityRenderTest : 3
-- NavigationPanelTest : 4
+Certificat public attendu, identique à Cockpit GPS 0.3 :
+83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30
 
-Écrans contrôlés : 412×915, 851×393, 360×640 dp, avec texte jusqu'à 130 % et clavier paysage simulé. Contrôles complets dans le viewport, aucune liste/panneau défilant. Les longs contenus sont paginés.
+PROJECTION DU DASHBOARD
+La version 0.4 réutilise CockpitTheme et Dashboard dans une Presentation contenant un ComposeView, reliée par VirtualDisplay à la surface Android Auto. Elle demande Car App API 5 ou plus pour les clics. Le chrome Android Auto reste fourni par l’hôte ; les destinations, favoris et options utilisent des modèles sans défilement. Le rendu classique reste disponible par « Carte seule » et sur les hôtes plus anciens.
 
-Signature : APK et AAB release acceptés avec le même certificat SHA-256 épinglé : 83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30. APK historique 0.2.0 refusé par ce nouveau contrôle. Aucun keystore ni secret n’est présent dans les fichiers publics. La publication vérifie aussi les identités APK/AAB, les sommes SHA-256, le contenu exact de l’archive des sources et le succès des contrôles CI du commit source.
+Les tests ProjectedDashboardSurfaceTest utilisent une véritable surface native ImageReader et la classe de production Presentation/ComposeView. Ils contrôlent :
+- le découpage dans la zone fournie par l’hôte, sans modifier son rectangle ;
+- les clics traduits depuis les coordonnées de surface, le respect des commandes désactivées et le rejet des coordonnées invalides ou hors zone ;
+- le remplacement et la fermeture de la projection, avec libération de l’ancienne composition et du VirtualDisplay ;
+- le refus d’une surface ou de dimensions invalides ;
+- le rendu effectif du dashboard partagé à plusieurs tailles et avec texte agrandi.
 
-Routage public vérifié entre points proches des centres de Sainville et Dourdan : deux serveurs OSRM automobiles retournent D5/D17 17,54 km / 23 min et D17/D838 18,46 km / 25,3 min. Points approximatifs, sans adresses domicile/travail ni trafic réel. Le choix est le plus rapide parmi les alternatives reçues, pas une garantie sur toutes les routes.
+Captures du contenu réellement rendu dans cette Presentation par le moteur graphique natif Robolectric :
+- cockpit-auto-dashboard.png : 1280 × 720, densité 160 dpi ;
+- cockpit-auto-dashboard-1024.png : 1024 × 600, densité 160 dpi ;
+- cockpit-auto-dashboard-800.png : 800 × 480, densité 160 dpi ;
+- cockpit-auto-dashboard-large-text.png : 800 × 480, texte à 130 %.
 
-Les images montrent le véritable écran Compose au repos via le moteur graphique natif Robolectric. Pas de trajet ou données GPS fictives dans l'application. Le fond de carte attend la position GPS au démarrage.
+Les captures 1024 × 600 et avec texte à 130 % ont aussi été revues après l’ajustement de hauteur de ligne. Ces captures montrent l’état au repos : aucune vitesse, météo, musique ni position GPS fictive n’y est injectée. Elles proviennent du composant de projection de production, mais ne sont pas des captures d’un autoradio physique ni du chrome Android Auto.
 
-Émulateur Android 15/API 35 x86_64 sans accélération : APK final 0.3.0 installé avec succès, lancement de l’Activity réussi et aucune exception AndroidRuntime fatale observée pendant ce contrôle court. Coexistence des packages fr.cockpit.gps et fr.cockpit.dashboard confirmée. L’ancien package de cet AVD était une 0.1.0 ; la coexistence avec l’APK exact 0.2.0 n’a pas été testée, car son installation par-dessus cette 0.1.0 a été refusée pour signature différente. Aucun effacement ni désinstallation. La réinstallation du même APK 0.3.0 a dépassé la borne de 20 secondes de cet essai logiciel, sans résultat : elle n’est pas déclarée vérifiée.
+DashboardProjectionTest vérifie aussi un viewport étroit de 560 × 320 dp, l’absence de défilement horizontal et vertical, la visibilité de la carte et des panneaux, des cibles tactiles de 48 dp entièrement visibles et sans chevauchement. Les menus atteignent leurs callbacks d’hôte. Le mode carte agrandie reste dans la même fenêtre, sans dialogue séparé ; sa fermeture restitue les compteurs et la musique. La carte est libérée correctement et le mode jour/nuit choisi survit aux mises à jour des données.
 
-Restent à vérifier sur matériel : capteurs/GPS routiers, Android Auto réel, session Apple Music réelle. L'affichage et la navigation dépendent des fournisseurs publics et de la connectivité. Pas de trafic, fermetures routières ou cartes hors ligne.
+Les tests existants couvrent les modèles Android Auto, la pagination, les gestes de carte, le cadrage, les calculs GPS, les trajets, le recalcul, les favoris et les fenêtres fixes. Le téléphone conserve son dashboard et ses parcours ; l’ajustement partagé de hauteur de ligne accompagne la projection. Les aperçus téléphone cockpit-landscape.png, cockpit-compact-landscape.png et cockpit-portrait.png restent des rendus de la véritable Activity sous Robolectric.
+
+SIGNATURE ET DISTRIBUTION
+Les contrôles de publication vérifient le certificat épinglé, l’identité fr.cockpit.gps des APK/AAB, les versions, les sommes SHA-256, la correspondance de l’archive des sources et le succès des contrôles CI du commit source. Aucun keystore ni secret ne doit apparaître dans les fichiers publics. La clé et son archive privée restent hors dépôt ; le propriétaire doit conserver une sauvegarde durable hors de l’environnement de travail.
+
+Cette version privée n’est pas qualifiée pour Google Play : le dashboard complet sur la surface de navigation ne respecte pas les restrictions de contenu du critère NF-2. Les exigences d’une éventuelle publication officielle, dont l’interface et la cible API applicable, sont décrites dans docs/ANDROID_AUTO.md. La publication GitHub et l’usage de KingInstaller ne constituent pas une validation Google Play.
+
+HISTORIQUE 0.3
+La version 0.3.0 a été publiée et ses APK/AAB signés ont été vérifiés avec le certificat ci-dessus ; 76 tests et Lint release avaient réussi. L’installation et le lancement de l’APK 0.3 sur l’émulateur logiciel Android 15 avaient réussi sans exception AndroidRuntime fatale observée. La nouvelle identité fr.cockpit.gps permet de garder l’ancien Cockpit 0.2 (fr.cockpit.dashboard), dont la clé est perdue ; les données de la 0.2 ne sont pas migrées automatiquement.
+
+LIMITES DES ESSAIS
+Restent à tester sur véhicule : rendu complet et zones réservées de l’hôte Android Auto, transmission des clics et gestes, navigation/GPS routiers et commandes avec une vraie session Apple Music. La confirmation utilisateur concerne l’installation Android Auto de la 0.3, pas encore la projection 0.4.
+
+Les cartes, le routage et la météo dépendent des services publics et de la connectivité. Pas de trafic, fermetures routières en temps réel ni cartes hors ligne complètes. Le contrôle historique Sainville–Dourdan portait sur des points approximatifs de centres de communes et ne valide pas un trajet domicile–travail précis.

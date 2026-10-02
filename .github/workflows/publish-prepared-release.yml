@@ -6,7 +6,7 @@ on:
       version:
         description: Release tag
         required: true
-        default: v0.3.0
+        default: v0.4.0
         type: string
       artifact_commit:
         description: Exact commit containing already signed public APK, AAB and source ZIP
@@ -68,15 +68,17 @@ jobs:
       - name: Prepare draft release
         run: |
           cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
-          Cockpit GPS : grande carte, guidage vocal, carte orientée, zoom automatique, comparaison de plusieurs itinéraires et commandes sans défilement sur le téléphone et Android Auto.
+          Cockpit GPS affiche désormais le même composant de tableau de bord sur le téléphone et Android Auto : carte, vitesse, météo, compteurs et commandes Apple Music réunis dans un écran fixe.
 
-          **Installation sans supprimer Cockpit 0.2.0 :** cette version utilise le nouveau package `fr.cockpit.gps` et s'installe à côté de l'ancienne application. Les anciens compteurs, favoris et réglages restent dans Cockpit 0.2.0 ; ils ne sont pas transférés automatiquement. Ce téléchargement n'est pas une mise à jour directe de l'ancien package `fr.cockpit.dashboard`, dont la clé de signature n'a pas été conservée.
+          Le dashboard s’ouvre directement sur les hôtes Car App API 5 ou plus. Les clics, le zoom et le déplacement de carte sont reliés à la vue partagée. La barre système et certains menus restent contrôlés par Android Auto. Le bouton « Carte seule » conserve le rendu de navigation classique ; les anciens hôtes gardent leur interface compatible.
 
-          Cockpit GPS utilise une nouvelle clé de publication persistante. Ses futures mises à jour doivent conserver ce package et cette clé pour s'installer normalement et préserver ses données.
+          **Mise à jour de Cockpit GPS 0.3 sans désinstallation :** même package `fr.cockpit.gps`, même certificat de signature, versionCode augmenté. Les compteurs, favoris et autorisations de Cockpit GPS sont conservés par la mise à jour. Installer le nouvel APK par-dessus la 0.3, avec KingInstaller si cette méthode est nécessaire sur votre téléphone. Sa compatibilité dépend du téléphone et d’Android Auto ; elle a été confirmée par l’utilisateur pour la 0.3 sur S23, pas encore pour cette version.
 
-          APK et AAB vérifiés avant publication : version, certificats, sommes SHA-256 et contrôles Android réussis pour le commit source exact. La clé privée n'est contenue dans aucun téléchargement ni dans la branche d'artefacts.
+          L’ancienne application Cockpit 0.2 (`fr.cockpit.dashboard`) reste indépendante ; ses données ne sont pas importées. Ne pas la désinstaller pour installer cette version.
 
-          Les itinéraires restent sans trafic en direct. Les essais sur autoradio et avec Apple Music restent à effectuer. L'installation directe sert aux essais sur téléphone ; Android Auto nécessite un canal de distribution Google Play compatible avec la Car App Library. Cette release GitHub n'est pas une publication sur le Play Store.
+          APK et AAB release signés et vérifiés. Tests JVM/Robolectric, rendu de la Presentation, clics et cycle de vie vérifiés avant publication. Les essais de cette version sur autoradio physique et avec Apple Music réel restent à effectuer. Les itinéraires restent sans trafic en direct.
+
+          Version de test privée : ce dashboard complet sur la surface de navigation n’est pas qualifié pour une distribution Google Play. La publication GitHub ne constitue pas une validation Android Auto par Google.
           EOF
           release_state=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)
           if [[ "$release_state" == false ]]; then

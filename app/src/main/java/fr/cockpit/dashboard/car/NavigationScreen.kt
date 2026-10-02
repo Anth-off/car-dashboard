@@ -68,7 +68,9 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         }
 
         override fun onSurfaceDestroyed(surfaceContainer: SurfaceContainer) {
+            val previous = surface
             releaseSurface()
+            if (surfaceContainer.surface !== previous) surfaceContainer.surface?.release()
         }
 
         override fun onVisibleAreaChanged(area: Rect) {
@@ -109,12 +111,12 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
     init {
         observe(navigation.state, trip.state)
         lifecycle.addObserver(object : DefaultLifecycleObserver {
-            override fun onStart(owner: LifecycleOwner) {
+            override fun onResume(owner: LifecycleOwner) {
                 visible = true
                 appManager.setSurfaceCallback(surfaceCallback)
             }
 
-            override fun onStop(owner: LifecycleOwner) {
+            override fun onPause(owner: LifecycleOwner) {
                 visible = false
                 runCatching { appManager.setSurfaceCallback(null) }
                 releaseSurface()
@@ -133,7 +135,11 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
         val actions = ActionStrip.Builder()
             .addAction(
                 Action.Builder().setTitle("Destinations")
-                    .setOnClickListener { screenManager.popToRoot() }.build()
+                    .setOnClickListener {
+                        if (carContext.carAppApiLevel >= 5) screenManager.push(
+                            DestinationListScreen(carContext) { screenManager.popToRoot() },
+                        ) else screenManager.popToRoot()
+                    }.build()
             )
             .addAction(
                 Action.Builder().setTitle("Infos")

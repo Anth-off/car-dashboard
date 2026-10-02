@@ -2,17 +2,17 @@
 
 Application Android native en français : tableau de bord sombre, navigation propre à l’application, commandes Apple Music et mesures GPS. Android 10 ou plus récent.
 
-À partir de la version **0.3.0**, l’application s’appelle **Cockpit GPS** et utilise l’identifiant `fr.cockpit.gps`. Elle s’installe **à côté de Cockpit 0.2**, sans désinstaller l’ancienne application. Ce n’est pas une mise à jour de l’installation 0.2 : ses compteurs et favoris restent dans l’ancienne application ; Cockpit GPS démarre avec des compteurs à zéro et des favoris à recréer.
+La version **0.4.0** reprend le dashboard du téléphone sur Android Auto : même carte, mêmes compteurs et commandes musicales dans la zone d’affichage fournie par la voiture. Les menus de destination et de réglage restent des écrans Android Auto sans défilement. Le détail du fonctionnement et des limites figure dans [ANDROID_AUTO.md](docs/ANDROID_AUTO.md).
 
-La clé de signature de la version 0.2 n’a pas été sauvegardée par son ancien workflow. Cockpit GPS utilise une nouvelle clé persistante et un contrôle de certificat pour ses prochaines mises à jour. Conserver cette clé et sa sauvegarde privée est indispensable : [signature et mises à jour](docs/SIGNING.md).
+**Installation par-dessus Cockpit GPS 0.3.0, sans désinstaller.** L’identifiant `fr.cockpit.gps` et la clé de signature sont conservés ; les compteurs, favoris et autorisations de Cockpit GPS restent dans l’application. La version 0.2 nommée « Cockpit », sous `fr.cockpit.dashboard`, reste une application distincte : ses anciennes données ne sont pas transférées automatiquement.
 
-[Page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
+[Page de distribution 0.4.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) · [Version 0.3.0 disponible](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
 
-La version de test 0.3.0 est publiée : [télécharger l’APK pour le téléphone](https://github.com/Anth-off/car-dashboard/releases/download/v0.3.0/cockpit-0.3.0.apk). La page de distribution fournit également le bundle `cockpit-0.3.0.aab`, les sources et les sommes de contrôle SHA-256.
+La publication 0.4.0 prévoit **`cockpit-0.4.0.apk`**, le bundle signé `cockpit-0.4.0.aab`, les sources et les sommes de contrôle SHA-256. Les fichiers deviennent disponibles après la réussite du workflow de publication.
 
 ![Dashboard sans défilement sur téléphone, au repos](artifacts/cockpit-landscape.png)
 
-Le téléphone utilise une interface Jetpack Compose personnalisée. L’écran Android Auto utilise les modèles de navigation Google : son apparence diffère du téléphone. Les nouveaux écrans évitent les listes défilantes et présentent les éléments longs par pages courtes avec boutons. Les déplacements au doigt à l’intérieur de la carte restent possibles.
+Le téléphone et Android Auto réutilisent les mêmes composants Compose `Dashboard` et `CockpitTheme`. La disposition s’adapte à la taille et à la zone disponible ; les barres, marges et commandes propres à Android Auto restent gérées par l’hôte. Le dashboard projeté demande la **Car App API 5 ou plus**, distincte de la version Android du téléphone. Les hôtes plus anciens conservent le rendu de navigation classique ; le bouton **Carte seule** permet aussi d’y revenir. Les déplacements et zooms à l’intérieur de la carte restent possibles, sans défilement de la page.
 
 ## Fonctions
 
@@ -30,39 +30,39 @@ Le téléphone utilise une interface Jetpack Compose personnalisée. L’écran 
 - Recalcul automatique après trois positions confirmant la sortie d’itinéraire ; ancien trajet conservé si le réseau échoue et délais progressifs entre tentatives. Recalcul manuel disponible.
 - Lecture/pause, précédent/suivant et métadonnées de la session Apple Music active.
 - Température météo extérieure Open-Meteo, optionnelle, avec date de mise à jour.
-- Android Auto : carte de guidage avec cadrage adaptatif et panneaux fixes de deux lignes ; favoris et alternatives par boutons précédent/suivant, musique, compteurs et météo.
+- Android Auto : dashboard partagé avec le téléphone sur Car App API 5+, commandes tactiles transmises aux composants, panoramique et zoom de carte. Favoris, alternatives et options sur écrans fixes à pagination ; mode **Carte seule** disponible.
 
 Les compteurs mesurent **uniquement les déplacements enregistrés pendant le suivi GPS**. Ils ne lisent pas le compteur kilométrique du véhicule. Les tunnels, mauvaises positions et arrêts de l’application peuvent laisser des distances non enregistrées. La température n’est pas une mesure d’un capteur de la voiture.
 
 ## Essayer sur le téléphone
 
-1. Télécharger **`cockpit-0.3.0.apk`** depuis la [page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0), puis l’installer. Ouvrir **Cockpit GPS**, distinct de l’ancien Cockpit, et autoriser la localisation **précise** lors du démarrage du suivi. Le suivi se lance depuis l’application visible et reste signalé par une notification.
+1. Télécharger **`cockpit-0.4.0.apk`** depuis la [page de distribution 0.4.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0), puis l’installer par-dessus Cockpit GPS 0.3.0. Accepter la **mise à jour** proposée par Android ; ne pas désinstaller l’application. Ouvrir **Cockpit GPS**, distinct de l’ancien Cockpit, et autoriser la localisation **précise** lors du démarrage du suivi. Le suivi se lance depuis l’application visible et reste signalé par une notification.
 2. Dans les réglages Cockpit GPS, activer la météo si souhaité. Autoriser les notifications Android pour voir le suivi et les indications hors de l’application.
 3. Pour la musique, accorder à Cockpit GPS l’accès spécial aux notifications, puis ouvrir Apple Music et lancer un morceau. Le contrôle nécessite une session Apple Music active ; l’application ne fournit ni abonnement ni catalogue musical.
 4. Utiliser la loupe de la carte pour rechercher une destination, sélectionner un favori ou un trajet récent. L’étoile ajoute/retire un favori ; les résultats de recherche ne sont pas enregistrés automatiquement. Un trajet calculé avec succès rejoint les récents.
 5. Accepter l’utilisation du calcul d’itinéraire en ligne, puis attendre une position GPS. Les boutons de carte permettent d’agrandir, zoomer, recentrer et afficher tout le trajet ; le haut-parleur coupe les annonces et le bouton d’itinéraires ouvre les alternatives et les étapes paginées.
 6. Arrêter le suivi pour mettre fin à l’enregistrement. Le compteur trajet reste conservé jusqu’à sa remise à zéro ; le total reste conservé.
 
-Conserver Cockpit 0.2 si ses compteurs ou favoris sont utiles. Les deux applications ont des données et des autorisations séparées ; aucune migration automatique n’est effectuée. Les prochaines versions de **Cockpit GPS** pourront remplacer cette nouvelle installation en conservant ses données, à condition de garder son identifiant et sa clé de signature.
+Pour une mise à jour depuis Cockpit GPS 0.3, les données et autorisations existantes sont conservées. Les étapes d’autorisation ci-dessus concernent une première installation ou un accès non encore accordé. Conserver l’ancien Cockpit 0.2 si ses compteurs ou favoris sont utiles : ses données restent séparées de celles de Cockpit GPS. Les [contrôles de signature](docs/SIGNING.md) protègent la continuité des prochaines mises à jour.
 
 Les versions Android récentes peuvent limiter l’accès aux notifications pour une application installée manuellement. Le téléphone indique alors les réglages supplémentaires disponibles dans sa fiche d’application. Cockpit n’active aucune permission automatiquement.
 
 ## Essayer sur Android Auto
 
-L’installation directe de l’APK permet de tester **le téléphone**. Pour une application basée sur la Car App Library, l’option Android Auto « Sources inconnues » ne suffit pas à la rendre disponible sur l’autoradio.
+Le propriétaire a confirmé que **Cockpit GPS 0.3 fonctionne sur son Samsung S23 avec KingInstaller**. C’est la méthode à réutiliser pour essayer la mise à jour 0.4 sur cet appareil ; cela ne garantit pas sa compatibilité avec toutes les versions d’Android Auto, tous les téléphones ou tous les autoradios. KingInstaller est un outil externe, distinct de Cockpit GPS.
 
-La voie officielle pour un véhicule réel est l’**Internal App Sharing** ou une piste de test interne dans **Google Play Console**, puis l’installation par le lien Google Play avec le compte testeur. Le fichier **`cockpit-0.3.0.aab`** est un bundle `release` signé, destiné à préparer cette distribution. Un compte Play Console et sa configuration sont nécessaires ; aucun accès à ce compte ni déploiement Google Play n’est configuré ici. La publication GitHub ne rend donc pas, à elle seule, l’application disponible dans Android Auto.
+1. Télécharger **`cockpit-0.4.0.apk`**, puis reprendre la même installation via KingInstaller que pour la version 0.3. Android doit proposer une **mise à jour de Cockpit GPS**, sans désinstallation.
+2. À l’arrêt, ouvrir Cockpit GPS sur le téléphone, vérifier les autorisations et démarrer le suivi GPS. Les favoris enregistrés dans la 0.3 restent disponibles.
+3. Connecter Android Auto puis ouvrir **Cockpit GPS**. Sur un hôte Car App API 5+, le dashboard partagé est l’écran principal ; sa surface conserve les commandes et les dimensions disponibles de l’autoradio.
+4. Utiliser le dashboard pour la carte, les compteurs et la musique. Les destinations, favoris et options s’ouvrent dans les menus Android Auto sans défilement. Si la projection n’est pas disponible ou si le rendu classique est préféré, utiliser **Carte seule**.
 
-Google Play peut utiliser une autre signature, notamment pour le partage interne. Avant de passer de l’APK GitHub à une distribution Play, vérifier la compatibilité des certificats : ce changement de canal n’est pas automatiquement une mise à jour compatible.
+L’installation de la 0.3 a été confirmée sur le S23 ; la projection du nouveau dashboard 0.4 doit encore être vérifiée sur l’autoradio réel. Les contrôles de compilation et les tests logiciels ne constituent pas cet essai.
 
-1. Charger un APK/AAB accepté par le canal choisi dans votre Play Console.
-2. Installer Cockpit GPS depuis son lien de test, préparer les autorisations et les favoris sur le téléphone, à l’arrêt.
-3. Démarrer le suivi GPS depuis le téléphone, connecter Android Auto, puis ouvrir Cockpit GPS dans le lanceur d’applications.
-4. Choisir une destination enregistrée. La navigation et la carte sont propres à Cockpit ; Waze n’est pas intégré.
+La voie officielle de distribution Android Auto reste un canal compatible **Google Play Console**, après satisfaction de ses exigences. **Cette version privée n’est pas qualifiée pour Google Play** : elle affiche le dashboard complet, avec musique et compteurs, sur la surface réservée à la cartographie par le critère de navigation **NF-2**. Une distribution officielle nécessiterait un rendu conforme, les validations Android Auto et la mise à niveau des exigences de plateforme applicables, notamment le niveau cible **API 36** au lieu du 35 actuel. Aucun compte Play Console ni déploiement Google Play n’est configuré ici ; le fichier AAB signé ne constitue pas une approbation de distribution.
 
-Le service est déclaré comme application **NAVIGATION** et implémente le calcul d’itinéraire et les instructions virage par virage. La conformité complète doit encore être vérifiée dans le Desktop Head Unit et sur véhicule avant distribution. Le rendu personnalisé Compose du téléphone ne remplace pas le lanceur Android Auto.
+Google Play peut utiliser une autre signature, notamment pour le partage interne. Un changement de canal doit préserver la compatibilité des certificats pour conserver une mise à jour directe de l’APK GitHub. Voir [ANDROID_AUTO.md](docs/ANDROID_AUTO.md) et [SIGNING.md](docs/SIGNING.md).
 
-Le [Desktop Head Unit officiel](https://developer.android.com/training/cars/testing/dhu) permet de poursuivre les tests de projection. Le rappel de simulation Android Auto suit un itinéraire réellement calculé et marque ses instructions « Simulation » ; il ne modifie pas les compteurs GPS.
+Le [Desktop Head Unit officiel](https://developer.android.com/training/cars/testing/dhu) permet de poursuivre les tests de projection. Le rappel de simulation Android Auto suit un itinéraire réellement calculé et marque ses instructions « Simulation » ; il ne modifie pas les compteurs GPS. La carte et le guidage sont propres à Cockpit GPS ; Waze n’est pas intégré.
 
 ## Compiler
 
@@ -121,6 +121,6 @@ Les tests Robolectric vérifient les modèles Android Auto API 1 et 7, la pagina
 ./gradlew -Dcockpit.screenshot.dir="$PWD/artifacts" :app:testDebugUnitTest
 ```
 
-Ces aperçus montrent l’interface du téléphone au repos, sans trajet ni mesures fictives. Ils ne constituent pas une capture de l’autoradio. Les essais sur Android Auto réel et avec une session Apple Music réelle restent à effectuer.
+Les aperçus téléphone et les captures `cockpit-auto-dashboard*.png` montrent respectivement la véritable Activity et le contenu de la véritable `Presentation` de projection, rendus sous Robolectric au repos, sans mesures fictives ; les captures de projection couvrent 1280 × 720, 1024 × 600, 800 × 480 et un texte à 130 %. Ces rendus logiciels ne constituent pas des captures de l’autoradio physique ni du chrome Android Auto. L’installation Android Auto de la 0.3 via KingInstaller a été confirmée sur le S23 ; les essais du dashboard projeté 0.4 et de ses commandes avec une session Apple Music réelle restent à effectuer sur véhicule.
 
 Références : [Car App Library](https://developer.android.com/training/cars/apps/library), [applications de navigation](https://developer.android.com/training/cars/apps/navigation), [installation et tests Android Auto](https://developer.android.com/training/cars/testing), [critères qualité](https://developer.android.com/docs/quality-guidelines/car-app-quality).

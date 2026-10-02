@@ -1,10 +1,12 @@
 # Signature et mises à jour de Cockpit GPS
 
-Depuis la version 0.3.0, l’application utilise le nom **Cockpit GPS** et l’identifiant **`fr.cockpit.gps`**. Elle s’installe à côté de Cockpit 0.2, qui conserve l’identifiant `fr.cockpit.dashboard`. L’ancienne application et ses données restent présentes ; il n’est pas nécessaire de la désinstaller.
+**La version 0.4.0 est une mise à jour de Cockpit GPS 0.3.0.** Elle conserve l’identifiant `fr.cockpit.gps` et la même clé de signature ; son `versionCode` passe de 3 à 4. Elle s’installe par-dessus la 0.3 sans désinstallation et conserve ses compteurs, favoris et autorisations. Aucune nouvelle clé n’est générée pour cette version.
 
-Il s’agit d’une nouvelle installation, pas d’une mise à jour de la 0.2. Les compteurs démarrent à zéro, les favoris doivent être recréés et les autorisations doivent être accordées à Cockpit GPS. Aucune migration automatique des données n’est effectuée.
+Le propriétaire a confirmé l’installation de la 0.3 sur son Samsung S23 avec KingInstaller. Reprendre cette méthode avec `cockpit-0.4.0.apk` doit proposer une mise à jour de Cockpit GPS. La compatibilité de cette méthode externe sur d’autres appareils, et le fonctionnement du nouveau dashboard projeté 0.4 sur véhicule, restent à vérifier.
 
-La [page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) fournit **`cockpit-0.3.0.apk`** et **`cockpit-0.3.0.aab`**, tous deux signés en variante `release` et publiés après réussite des contrôles.
+La [page de distribution 0.4.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) est prévue pour **`cockpit-0.4.0.apk`** et **`cockpit-0.4.0.aab`**, signés en variante `release`. Leur disponibilité dépend de la réussite du workflow de publication. La [version 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) reste disponible.
+
+Cockpit 0.2 utilise un autre identifiant, `fr.cockpit.dashboard`. Cockpit GPS reste installé à côté de cette ancienne application, dont les données ne sont pas transférées automatiquement. Une première installation de Cockpit GPS commence avec des compteurs à zéro et des favoris à recréer ; cette limitation ne concerne pas la mise à jour 0.3 vers 0.4.
 
 ## Pourquoi la version 0.2 ne peut pas être remplacée
 
@@ -20,7 +22,13 @@ Une autre clé ne peut pas signer une mise à jour compatible avec cette install
 
 ## Signature des prochaines versions
 
-Cockpit GPS utilise une nouvelle clé persistante. Son certificat public est épinglé dans [`release-signing-certificate.sha256`](release-signing-certificate.sha256). Ce fichier concerne **la nouvelle application** ; il ne rétablit pas la compatibilité avec Cockpit 0.2.
+Cockpit GPS réutilise la clé persistante de sa première version 0.3. Son certificat public est épinglé dans [`release-signing-certificate.sha256`](release-signing-certificate.sha256) :
+
+```text
+83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30
+```
+
+Ce certificat concerne **Cockpit GPS 0.3 et ses mises à jour**, dont la 0.4 ; il ne rétablit pas la compatibilité avec l’ancien Cockpit 0.2.
 
 Pour mettre à jour Cockpit GPS sans réinstallation et conserver ses données, garder l’identifiant `fr.cockpit.gps`, augmenter `versionCode` et signer avec cette même clé. Gradle et les scripts de publication refusent une signature différente. Ne pas recréer une clé à chaque compilation.
 
@@ -28,7 +36,7 @@ La clé et son archive de sauvegarde privée sont conservées hors du dépôt et
 
 ## Publication d’artefacts signés localement
 
-La première publication de Cockpit GPS peut utiliser des artefacts préparés :
+La publication des versions signées de Cockpit GPS utilise des artefacts préparés :
 
 1. Compiler localement l’APK et l’AAB `release` avec la clé persistante, en dehors du dépôt.
 2. Vérifier leurs signatures, identifiant, version et sommes de contrôle, puis préparer l’archive des sources correspondant au commit.
@@ -83,10 +91,12 @@ python3 scripts/verify-release-signature.py --keystore "$COCKPIT_SIGNING_STORE_F
 
 Les tags doivent correspondre à `versionName`. Chaque version suivante doit augmenter `versionCode` et conserver la même clé et le même identifiant d’application.
 
-## Android Auto et Google Play
+## Android Auto, KingInstaller et Google Play
 
-La publication GitHub fournit un APK installable sur le téléphone et un AAB signé. Elle ne rend pas automatiquement Cockpit GPS disponible sur un autoradio Android Auto. Une application basée sur la Car App Library doit passer par un canal de test Google Play compatible, par exemple le partage interne d’applications ou une piste de test interne, avec un compte Play Console configuré.
+L’APK GitHub 0.3 a été installé avec KingInstaller et son fonctionnement Android Auto a été confirmé par le propriétaire sur son S23. La 0.4 conserve la même identité de package et de signature pour permettre la mise à jour par cette méthode, sans désinstallation. KingInstaller est externe au projet ; ce retour sur un appareil ne garantit pas la compatibilité de chaque combinaison téléphone, Android Auto et autoradio.
 
-Aucun accès à un compte Play Console ni déploiement Google Play n’est configuré ici. Le fichier AAB sert à préparer cette étape ; il ne s’installe pas directement sur le téléphone.
+La voie officielle de distribution reste un canal Google Play compatible avec la Car App Library, sous réserve de conformité. La version privée 0.4 affiche des informations et commandes du dashboard dans la surface de cartographie ; elle n’est pas qualifiée pour Google Play au regard du critère **NF-2**. Une future distribution officielle nécessiterait une interface conforme, les validations requises et la mise à niveau de la cible de plateforme, notamment vers **API 36**. Aucun accès à un compte Play Console ni déploiement Google Play n’est configuré ici.
+
+Le bundle AAB est signé mais ne s’installe pas directement sur le téléphone. Sa présence ne signifie pas que Google Play a approuvé l’application. Voir [ANDROID_AUTO.md](ANDROID_AUTO.md) pour les différences entre la projection privée et la distribution officielle.
 
 Google Play peut utiliser une autre clé de signature, en particulier pour le partage interne. Avant de changer de canal de distribution, vérifier la compatibilité avec les installations existantes. Le passage par Google Play ne répare pas la perte de la clé 0.2 et ne garantit pas à lui seul une mise à jour compatible de l’APK GitHub.

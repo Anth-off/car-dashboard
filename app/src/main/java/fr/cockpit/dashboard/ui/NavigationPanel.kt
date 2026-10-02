@@ -40,6 +40,7 @@ fun NavigationPanel(
     data: DashboardData, onSearch: () -> Unit, onStop: () -> Unit, onReroute: () -> Unit,
     onTracking: () -> Unit, onVoiceEnabled: (Boolean) -> Unit, modifier: Modifier = Modifier,
     onSelectRoute: (Route) -> Boolean = { false },
+    projection: DashboardProjection? = null,
 ) {
     var fullscreen by rememberSaveable { mutableStateOf(false) }
     var journey by remember { mutableStateOf(false) }
@@ -50,15 +51,17 @@ fun NavigationPanel(
         onDispose { view.keepScreenOn = previous }
     }
     NavigationSurface(data, onSearch, onStop, onReroute, onTracking, onVoiceEnabled,
-        onExpand = { fullscreen = true }, onJourney = { journey = true }, expanded = false, modifier)
-    if (fullscreen) Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(
+        onExpand = projection?.onToggleMap ?: { fullscreen = true },
+        onJourney = projection?.onJourney ?: { journey = true },
+        expanded = projection?.mapExpanded == true, modifier, projection)
+    if (projection == null && fullscreen) Dialog(onDismissRequest = { fullscreen = false }, properties = DialogProperties(
         usePlatformDefaultWidth = false, decorFitsSystemWindows = false,
     )) {
         NavigationSurface(data, onSearch = { fullscreen = false; onSearch() }, onStop, onReroute,
             onTracking, onVoiceEnabled, onExpand = { fullscreen = false }, onJourney = { journey = true },
             expanded = true, modifier = Modifier.fillMaxSize().background(Ink).safeDrawingPadding())
     }
-    if (journey) JourneyDialog(data.navigation, onSelectRoute, onReroute) { journey = false }
+    if (projection == null && journey) JourneyDialog(data.navigation, onSelectRoute, onReroute) { journey = false }
 }
 
 @Composable
@@ -66,6 +69,7 @@ private fun NavigationSurface(
     data: DashboardData, onSearch: () -> Unit, onStop: () -> Unit, onReroute: () -> Unit,
     onTracking: () -> Unit, onVoiceEnabled: (Boolean) -> Unit, onExpand: () -> Unit,
     onJourney: () -> Unit, expanded: Boolean, modifier: Modifier,
+    projection: DashboardProjection? = null,
 ) {
     val nav = data.navigation
     var map by remember { mutableStateOf<RouteMapView?>(null) }
@@ -74,6 +78,11 @@ private fun NavigationSurface(
     var headingUp by remember { mutableStateOf(false) }
     var night by rememberSaveable { mutableStateOf(true) }
     var toolsOpen by remember { mutableStateOf(false) }
+    val onMapReady by rememberUpdatedState(projection?.onMapReady)
+    DisposableEffect(map, projection != null) {
+        onMapReady?.invoke(map)
+        onDispose { onMapReady?.invoke(null) }
+    }
     val hasPosition = data.latitude != null && data.longitude != null
     val guidance = nav.active || nav.loading || nav.arrived
     BoxWithConstraints(modifier.clip(RoundedCornerShape(if (expanded) 0.dp else 22.dp))
@@ -107,10 +116,11 @@ private fun NavigationSurface(
                         nav.destination?.let { fr.cockpit.dashboard.navigation.GeoPoint(it.latitude, it.longitude) },
                         nav.progressFraction.toFloat(), data.speedKmh, nav.distanceToTurnMeters,
                         navigationActive = nav.active, locationFresh = !nav.gpsPaused && data.speedKmh != null)
-                    view.setNightMode(night)
+                    if (projection == null) view.setNightMode(night)
                 })
                 Row(Modifier.align(Alignment.TopStart).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    MapButton(Icons.Rounded.Layers, "Options de la carte", active = toolsOpen, onClick = { toolsOpen = true })
+                    MapButton(Icons.Rounded.Layers, "Options de la carte", active = toolsOpen,
+                        onClick = projection?.onMapOptions ?: { toolsOpen = true })
                     if (!following || overview) MapButton(Icons.Rounded.MyLocation, "Recentrer sur ma position",
                         enabled = hasPosition, onClick = { map?.recenter() })
                 }
@@ -141,8 +151,8 @@ private fun NavigationSurface(
             } else Row(Modifier.fillMaxWidth().height(52.dp).background(GuidancePanel).padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (hasPosition) "Prêt à partir" else "Activez le GPS", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Text(nav.error ?: "Votre route, en un coup d’œil", fontSize = 10.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(if (hasPosition) "Prêt à partir" else "Activez le GPS", fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold)
+                    Text(nav.error ?: "Votre route, en un coup d’œil", fontSize = 10.sp, lineHeight = 13.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (!data.recording) IconButton(onClick = onTracking, modifier = Modifier.size(48.dp)) { Icon(Icons.Rounded.MyLocation, "Activer le GPS depuis la carte", tint = NavigationBlue) }
                 if (nav.error != null && nav.destination != null) IconButton(onClick = onReroute, modifier = Modifier.size(48.dp)) {
@@ -154,7 +164,7 @@ private fun NavigationSurface(
             }
         }
     }
-    if (toolsOpen) FixedNavigationDialog("Votre carte", onDismiss = { toolsOpen = false }, footer = {
+    if (projection == null && toolsOpen) FixedNavigationDialog("Votre carte", onDismiss = { toolsOpen = false }, footer = {
         TextButton(onClick = { toolsOpen = false }) { Text("Terminé") }
     }) {
         Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.SpaceEvenly) {

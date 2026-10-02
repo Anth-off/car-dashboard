@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import fr.cockpit.dashboard.navigation.NavigationState
 import fr.cockpit.dashboard.destinations.Destination
+import fr.cockpit.dashboard.map.RouteMapView
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -55,6 +56,15 @@ data class DashboardData(
     val bearing: Float? = null, val accuracyMeters: Float? = null,
 )
 
+/** The car host opens its own menus; the dashboard itself uses the same Compose layout. */
+data class DashboardProjection(
+    val mapExpanded: Boolean,
+    val onToggleMap: () -> Unit,
+    val onMapReady: (RouteMapView?) -> Unit,
+    val onMapOptions: () -> Unit,
+    val onJourney: () -> Unit,
+)
+
 /** Every dashboard control stays in one viewport; the map receives all remaining space. */
 @Composable
 fun Dashboard(
@@ -63,26 +73,35 @@ fun Dashboard(
     onMusic: () -> Unit, onPlayPause: () -> Unit, onPrevious: () -> Unit, onNext: () -> Unit,
     onVoiceEnabled: (Boolean) -> Unit = {},
     onSelectRoute: (fr.cockpit.dashboard.navigation.Route) -> Boolean = { false },
+    projection: DashboardProjection? = null,
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Ink).safeDrawingPadding()
         .padding(8.dp).testTag("dashboard_viewport")) {
         val viewportWidth = maxWidth
-        val landscape = maxWidth > maxHeight && maxWidth >= 600.dp
+        val landscape = maxWidth > maxHeight &&
+            (maxWidth >= 600.dp || (projection != null && maxWidth >= 440.dp))
         val largeText = LocalDensity.current.fontScale > 1.15f
         val musicHeight = if (largeText) 116.dp else 108.dp
         val metricsHeight = if (largeText) 128.dp else 116.dp
         val header: @Composable () -> Unit = { DashboardHeader(data, onTracking, onSettings) }
         val map: @Composable (Modifier) -> Unit = { modifier ->
             NavigationPanel(data, onDestinations, onStopNavigation, onReroute, onTracking,
-                onVoiceEnabled, modifier.testTag("dashboard_map"), onSelectRoute)
+                onVoiceEnabled, modifier.testTag("dashboard_map"), onSelectRoute, projection)
         }
         val music: @Composable (Modifier) -> Unit = { modifier ->
             MusicCard(data, onMusic, onPlayPause, onPrevious, onNext, modifier)
         }
-        if (landscape) {
+        if (projection?.mapExpanded == true) {
+            map(Modifier.fillMaxSize())
+        } else if (landscape) {
             Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 map(Modifier.weight(1f).fillMaxHeight())
-                Column(Modifier.width(if (viewportWidth >= 1_000.dp) 320.dp else 280.dp).fillMaxHeight(),
+                val sidebarWidth = when {
+                    viewportWidth >= 1_000.dp -> 320.dp
+                    projection != null && viewportWidth < 600.dp -> 216.dp
+                    else -> 280.dp
+                }
+                Column(Modifier.width(sidebarWidth).fillMaxHeight(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     header()
                     DriveSummary(data, onReset, Modifier.weight(1f))
@@ -109,11 +128,11 @@ private fun DashboardHeader(data: DashboardData, onTracking: () -> Unit, onSetti
         }
         Spacer(Modifier.width(8.dp))
         Column(Modifier.weight(1f)) {
-            Text("COCKPIT", fontWeight = FontWeight.Bold, fontSize = 13.sp, letterSpacing = 1.5.sp)
+            Text("COCKPIT", fontWeight = FontWeight.Bold, fontSize = 13.sp, lineHeight = 16.sp, letterSpacing = 1.5.sp)
             Text(when { data.recording && data.speedKmh != null -> "GPS ACTIF"
                 data.recording -> "SIGNAL GPS…"; else -> "GPS EN PAUSE" },
                 color = if (data.recording && data.speedKmh != null) Lime else Muted,
-                fontSize = 9.sp, maxLines = 1)
+                fontSize = 9.sp, lineHeight = 12.sp, maxLines = 1)
         }
         FilledTonalIconButton(onClick = onTracking, modifier = Modifier.size(48.dp),
             colors = IconButtonDefaults.filledTonalIconButtonColors(

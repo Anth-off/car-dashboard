@@ -22,6 +22,7 @@ import androidx.car.app.navigation.model.NavigationTemplate
 import androidx.car.app.testing.ScreenController
 import androidx.car.app.testing.SessionController
 import androidx.car.app.testing.TestCarContext
+import androidx.car.app.testing.TestAppManager
 import androidx.car.app.testing.TestScreenManager
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ApplicationProvider
@@ -34,6 +35,8 @@ import fr.cockpit.dashboard.navigation.RouteStep
 import fr.cockpit.dashboard.navigation.Route
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -195,7 +198,8 @@ class CarTemplateSmokeTest {
 
     @Test
     fun incomingNavigationIntentKeepsDestinationsAsBackStackRoot() = onMain {
-        val context = carContext(7)
+        // Older hosts have no surface click callback and keep the template-only fallback.
+        val context = carContext(1)
         val preferences = context.getSharedPreferences("navigation_preferences", Context.MODE_PRIVATE)
         val wasAcknowledged = preferences.getBoolean("provider_acknowledged", false)
         preferences.edit().putBoolean("provider_acknowledged", false).commit()
@@ -221,6 +225,75 @@ class CarTemplateSmokeTest {
             hostLifecycle.currentState = Lifecycle.State.DESTROYED
             preferences.edit().putBoolean("provider_acknowledged", wasAcknowledged).commit()
         }
+    }
+
+    @Test
+    fun modernHostsOpenTheSharedDashboardDirectlyAndKeepItAsTheBackStackRoot() = onMain {
+        listOf(Intent(), Intent(CarContext.ACTION_NAVIGATE, Uri.parse("geo:48.8566,2.3522"))).forEach { intent ->
+            val context = carContext(7)
+            val session = CockpitCarSession()
+            SessionController(session, context, intent)
+            val hostLifecycle = context.lifecycleOwner.registry
+            try {
+                val screens = context.getCarService(TestScreenManager::class.java)
+                hostLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
+                screens.push(session.onCreateScreen(intent))
+                hostLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START)
+                hostLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+                shadowOf(Looper.getMainLooper()).idle()
+                assertTrue(screens.top is ProjectedDashboardScreen)
+                val appManager = context.getCarService(TestAppManager::class.java)
+                val firstCallback = appManager.surfaceCallback
+                assertNotNull(firstCallback)
+                val template = screens.top.onGetTemplate() as NavigationTemplate
+                assertEquals(null, template.navigationInfo)
+                assertEquals(listOf("Menu", "Carte seule"), template.actionStrip!!.actions.map { it.title.toString() })
+                assertTrue(template.mapActionStrip!!.actions.contains(Action.PAN))
+                // Host-rendered controls remain usable if a particular display cannot send taps.
+                click(template.actionStrip!!.actions[0])
+                assertNull(appManager.surfaceCallback)
+                val menu = screens.top.onGetTemplate() as PaneTemplate
+                assertEquals(2, menu.pane.rows.size)
+                assertEquals(2, menu.pane.actions.size)
+                click(menu.pane.actions[0])
+                assertTrue(screens.top is DestinationListScreen)
+                val destinations = screens.top.onGetTemplate() as PaneTemplate
+                click(destinations.pane.actions[0])
+                assertTrue(screens.top is ProjectedDashboardScreen)
+                assertNotNull(appManager.surfaceCallback)
+                assertNotSame(firstCallback, appManager.surfaceCallback)
+
+                // Both map renderers share AppManager's one callback. Pushing and popping
+                // must not let the departing screen clear the newly resumed one's callback.
+                click((screens.top.onGetTemplate() as NavigationTemplate).actionStrip!!.actions[1])
+                assertTrue(screens.top is NavigationScreen)
+                assertNotNull(appManager.surfaceCallback)
+                screens.pop()
+                assertTrue(screens.top is ProjectedDashboardScreen)
+                assertNotNull(appManager.surfaceCallback)
+
+                click((screens.top.onGetTemplate() as NavigationTemplate).actionStrip!!.actions[0])
+                val secondMenu = screens.top.onGetTemplate() as PaneTemplate
+                click(secondMenu.actionStrip!!.actions[0])
+                val options = screens.top.onGetTemplate() as PaneTemplate
+                assertEquals(2, options.pane.rows.size)
+                assertEquals(2, options.pane.actions.size)
+                click(options.pane.actions[0])
+                assertTrue(screens.top is ProjectedDashboardScreen)
+                assertNotNull(appManager.surfaceCallback)
+            } finally {
+                hostLifecycle.currentState = Lifecycle.State.DESTROYED
+            }
+        }
+    }
+
+    @Test
+    fun projectedDashboardOnlyUsesViewportsThatFitItsControls() {
+        assertTrue(projectedDashboardFits(560f, 320f))
+        assertTrue(projectedDashboardFits(800f, 480f))
+        assertTrue(projectedDashboardFits(360f, 640f))
+        assertTrue(!projectedDashboardFits(500f, 200f))
+        assertTrue(!projectedDashboardFits(200f, 640f))
     }
 
     @Test

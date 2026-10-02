@@ -13,7 +13,10 @@ import fr.cockpit.dashboard.navigation.NavigationRepository
 import java.util.Locale
 
 /** One favorite per fixed card, regardless of how many places are saved on the phone. */
-internal class DestinationListScreen(carContext: CarContext) : LiveCarScreen(carContext) {
+internal class DestinationListScreen(
+    carContext: CarContext,
+    private val returnToDashboard: (() -> Unit)? = null,
+) : LiveCarScreen(carContext) {
     private val destinations = DestinationRepository.get(carContext)
     private var selectedIndex = 0
 
@@ -31,22 +34,27 @@ internal class DestinationListScreen(carContext: CarContext) : LiveCarScreen(car
             } ?: "Ajoutez un lieu sur le téléphone, à l’arrêt."))
             .addRow(compactCarRow("Adresse", destination?.let(::destinationAddress) ?: "Aucun favori enregistré"))
             .addAction(Action.Builder().setTitle("Carte")
-                .setOnClickListener { screenManager.push(NavigationScreen(carContext)) }.build())
+                .setOnClickListener(::showMap).build())
         if (destination != null) {
             pane.addAction(Action.Builder().setTitle("Y aller").setOnClickListener {
                 if (canStartCarNavigation(carContext)) {
                     NavigationRepository.get(carContext).start(destination)
-                    screenManager.push(NavigationScreen(carContext))
+                    showMap()
                 }
             }.build())
         }
         val template = PaneTemplate.Builder(pane.build())
             .setTitle("Cockpit · Destinations")
-            .setHeaderAction(Action.APP_ICON)
+            .setHeaderAction(if (returnToDashboard != null) Action.BACK else Action.APP_ICON)
         if (favorites.size > 1) template.setActionStrip(carPageActions(
             previous = { changePage(-1) }, next = { changePage(1) },
         ))
         return template.build()
+    }
+
+    private fun showMap() {
+        if (returnToDashboard != null) returnToDashboard.invoke()
+        else screenManager.push(NavigationScreen(carContext))
     }
 
     private fun changePage(direction: Int) {
