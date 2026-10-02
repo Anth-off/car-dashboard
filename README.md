@@ -8,7 +8,7 @@ Depuis la version **0.4.0**, Cockpit GPS reprend le dashboard du téléphone sur
 
 [Page de distribution 0.4.1](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.1) · [Version 0.4.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
 
-Version de test **0.4.1** : [télécharger l’APK](https://github.com/Anth-off/car-dashboard/releases/download/v0.4.1/cockpit-0.4.1.apk). La page de distribution regroupe également le bundle signé `cockpit-0.4.1.aab`, les sources et les sommes de contrôle SHA-256. Ce correctif réduit les annonces GPS et leurs interruptions, améliore la reconnexion musicale avec les accès déjà accordés et distingue le suivi actif de l’attente d’une position ; son comportement après mise à jour sur le S23 reste à confirmer.
+Version de test **0.4.1 publiée** : [télécharger l’APK](https://github.com/Anth-off/car-dashboard/releases/download/v0.4.1/cockpit-0.4.1.apk). La page de distribution regroupe également le bundle signé `cockpit-0.4.1.aab`, les sources et les sommes de contrôle SHA-256. Ce correctif réduit les annonces GPS et leurs interruptions, améliore la reconnexion musicale avec les accès déjà accordés et distingue le suivi actif de l’attente d’une position ; son comportement après mise à jour sur le S23 reste à confirmer.
 
 ![Dashboard sans défilement sur téléphone, au repos](artifacts/cockpit-landscape.png)
 

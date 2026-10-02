@@ -30,7 +30,10 @@ APK et AAB release compilés ; Android Lint release sans erreur. Signatures APK/
 83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30
 Identité conservée fr.cockpit.gps ; versionName 0.4.1, versionCode 5. Les aperçus Robolectric téléphone et Presentation ont été régénérés avec le nouveau libellé de suivi en pause.
 
-Publication 0.4.1 : en préparation. La validation logicielle ne constitue pas un essai de mise à jour sur Samsung ; la résolution de l’interruption signalée reste à confirmer sur le S23 et l’autoradio réels. Les tests de reconnexion utilisent les callbacks Android sous Robolectric, pas une vraie session Apple Music. Une autorisation réellement refusée/retirée doit toujours être accordée par l’utilisateur. Le correctif ne diagnostique pas toutes les causes possibles d’absence de signal GPS.
+Publication GitHub v0.4.1 réussie, commit source 92198a3ffa96ab9e42f46289a3b03888b9258bdb.
+Contrôles CI : run 37020820002 réussi ; publication : run 37021174717 réussi.
+APK téléchargé depuis le lien public et signature vérifiée ; SHA-256 f9d7892d8604a921df521b148d61d73d3fb357ce7998f0e8a33404f014e9367a.
+ La validation logicielle ne constitue pas un essai de mise à jour sur Samsung ; la résolution de l’interruption signalée reste à confirmer sur le S23 et l’autoradio réels. Les tests de reconnexion utilisent les callbacks Android sous Robolectric, pas une vraie session Apple Music. Une autorisation réellement refusée/retirée doit toujours être accordée par l’utilisateur. Le correctif ne diagnostique pas toutes les causes possibles d’absence de signal GPS.
 
 HISTORIQUE DE VÉRIFICATION 0.4.0
 Les données ci-dessous concernent la version précédente ; ses captures ont été remplacées par les rendus 0.4.1.

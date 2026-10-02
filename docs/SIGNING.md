@@ -4,7 +4,7 @@
 
 Le propriétaire a confirmé l’installation de la 0.3 sur son Samsung S23 avec KingInstaller. Reprendre cette méthode avec `cockpit-0.4.1.apk` doit proposer une mise à jour de Cockpit GPS. La compatibilité de cette méthode externe sur d’autres appareils, et le fonctionnement du nouveau dashboard projeté 0.4 sur véhicule, restent à vérifier.
 
-La [page de distribution 0.4.1](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.1) est prévue pour **`cockpit-0.4.1.apk`** et **`cockpit-0.4.1.aab`**, signés en variante `release`. Leur disponibilité dépend de la réussite du workflow de publication. La [version 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) reste disponible.
+La [page de distribution 0.4.1](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.1) fournit **`cockpit-0.4.1.apk`** et **`cockpit-0.4.1.aab`**, signés en variante `release` et vérifiés avant publication. La [version 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) reste disponible.
 
 Cockpit 0.2 utilise un autre identifiant, `fr.cockpit.dashboard`. Cockpit GPS reste installé à côté de cette ancienne application, dont les données ne sont pas transférées automatiquement. Une première installation de Cockpit GPS commence avec des compteurs à zéro et des favoris à recréer ; cette limitation ne concerne pas la mise à jour 0.3 vers 0.4.
 
