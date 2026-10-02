@@ -192,7 +192,19 @@ class MainActivity : ComponentActivity() {
         trips.startTracking(this)
         pendingDestination?.let { navigation.start(it) }
         pendingDestination = null
-        if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        requestNotificationsOnce()
+    }
+
+    private fun requestNotificationsOnce() {
+        if (Build.VERSION.SDK_INT < 33) return
+        val preferences = getSharedPreferences("permission_requests", MODE_PRIVATE)
+        val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        // Remember only that the question was handled, never a grant. Android remains the source
+        // of truth. A refused or later withdrawn notification permission must not prompt on every trip.
+        if (granted) {
+            preferences.edit().putBoolean("notifications_handled", true).apply()
+        } else if (!preferences.getBoolean("notifications_handled", false)) {
+            preferences.edit().putBoolean("notifications_handled", true).apply()
             notifications.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }

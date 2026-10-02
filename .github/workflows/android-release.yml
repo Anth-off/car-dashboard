@@ -6,7 +6,7 @@ on:
       version:
         description: Release tag
         required: true
-        default: v0.4.0
+        default: v0.4.1
         type: string
 
 permissions:
@@ -88,17 +88,17 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > release-notes.md <<'EOF'
-          Cockpit GPS affiche désormais le même composant de tableau de bord sur le téléphone et Android Auto : carte, vitesse, météo, compteurs et commandes Apple Music réunis dans un écran fixe.
+          Cockpit GPS 0.4.1 corrige la reprise musicale et les indications qui pouvaient faire croire que les autorisations avaient disparu après une mise à jour.
 
-          Le dashboard s’ouvre directement sur les hôtes Car App API 5 ou plus. Les clics, le zoom et le déplacement de carte sont reliés à la vue partagée. La barre système et certains menus restent contrôlés par Android Auto. Le bouton « Carte seule » conserve le rendu de navigation classique ; les anciens hôtes gardent leur interface compatible.
+          Quand Android déconnecte le service musical, Cockpit demande sa reconnexion uniquement si l’accès aux notifications est toujours accordé. Les commandes retrouvent la session Apple Music sans demander de retirer puis réactiver cet accès. Une session Apple Music doit toujours être disponible.
 
-          **Mise à jour de Cockpit GPS 0.3 sans désinstallation :** même package `fr.cockpit.gps`, même certificat de signature, versionCode augmenté. Les compteurs, favoris et autorisations de Cockpit GPS sont conservés par la mise à jour. Installer le nouvel APK par-dessus la 0.3, avec KingInstaller si cette méthode est nécessaire sur votre téléphone. Sa compatibilité dépend du téléphone et d’Android Auto ; elle a été confirmée par l’utilisateur pour la 0.3 sur S23, pas encore pour cette version.
+          Quand le suivi GPS est déjà lancé mais n’a pas encore reçu de position, la carte affiche la recherche du signal au lieu de demander d’activer le GPS. La météo attend elle aussi une position récente. Après une mise à jour, ouvrir Cockpit et démarrer le suivi si nécessaire ; cela ne demande pas de réaccorder une localisation déjà autorisée.
 
-          L’ancienne application Cockpit 0.2 (`fr.cockpit.dashboard`) reste indépendante ; ses données ne sont pas importées. Ne pas la désinstaller pour installer cette version.
+          Un refus des notifications de trajet n’est plus redemandé à chaque démarrage du suivi. Android reste la source de vérité pour les accès : le correctif ne peut pas accorder une permission refusée ou retirée.
 
-          APK et AAB release signés et vérifiés. Tests JVM/Robolectric, rendu de la Presentation, clics et cycle de vie vérifiés avant publication. Les essais de cette version sur autoradio physique et avec Apple Music réel restent à effectuer. Les itinéraires restent sans trafic en direct.
+          **Mise à jour sans désinstallation depuis Cockpit GPS 0.3 ou 0.4 :** même package `fr.cockpit.gps`, même certificat et versionCode augmenté. Installer `cockpit-0.4.1.apk` par-dessus l’application avec la même méthode KingInstaller. Compteurs et favoris conservés. L’ancien Cockpit 0.2 reste indépendant.
 
-          Version de test privée : ce dashboard complet sur la surface de navigation n’est pas qualifié pour une distribution Google Play. La publication GitHub ne constitue pas une validation Android Auto par Google.
+          Le dashboard partagé téléphone/Android Auto de la 0.4 est conservé. Tests logiciels et signatures vérifiés avant publication ; la reprise sur le S23 et l’autoradio réels reste à confirmer. Version de test privée sur GitHub, sans qualification Google Play et sans trafic routier en direct.
           EOF
           release_state=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)
           if [[ "$release_state" == false ]]; then

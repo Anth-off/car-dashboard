@@ -11,6 +11,7 @@ import android.media.session.PlaybackState
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.service.notification.NotificationListenerService
 import android.view.KeyEvent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -125,6 +126,12 @@ class MusicRepository private constructor(context: Context) {
 
     internal fun onListenerUnavailable() {
         onMain { clearAccess() }
+    }
+
+    /** Repair a disconnected listener only while Android still grants the user's original access. */
+    internal fun requestListenerReconnect(): Boolean {
+        if (!hasAccess()) return false
+        return runCatching { NotificationListenerService.requestRebind(listenerComponent) }.isSuccess
     }
 
     private fun control(command: (MediaController, PlaybackState) -> Boolean): Boolean {

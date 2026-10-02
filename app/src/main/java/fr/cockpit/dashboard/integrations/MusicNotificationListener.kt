@@ -7,13 +7,19 @@ import android.service.notification.NotificationListenerService
  * It intentionally implements no notification-posted/removed callbacks and stores no notifications.
  */
 class MusicNotificationListener : NotificationListenerService() {
+    // One request per disconnection; reset only when Android actually reconnects the listener.
+    private var reconnectRequested = false
+
     override fun onListenerConnected() {
         super.onListenerConnected()
+        reconnectRequested = false
         MusicRepository.get(this).refresh()
     }
 
     override fun onListenerDisconnected() {
-        MusicRepository.get(this).onListenerUnavailable()
+        val music = MusicRepository.get(this)
+        music.onListenerUnavailable()
         super.onListenerDisconnected()
+        if (!reconnectRequested) reconnectRequested = music.requestListenerReconnect()
     }
 }

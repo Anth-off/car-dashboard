@@ -27,6 +27,37 @@ import org.robolectric.annotation.LooperMode
 class NavigationPanelTest {
     @get:Rule val compose = createComposeRule()
 
+    @Test fun startingTrackingWaitsForAFixWithoutAskingToStartAgain() {
+        val dashboard = mutableStateOf(data(NavigationState()))
+        var starts = 0
+        compose.setContent {
+            CockpitTheme {
+                NavigationPanel(dashboard.value, {}, {}, {}, {
+                    starts++
+                    dashboard.value = dashboard.value.copy(recording = true)
+                }, {}, Modifier.fillMaxSize())
+            }
+        }
+        compose.onNodeWithText("Activez le GPS").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Activer le GPS depuis la carte").performClick()
+        compose.onNodeWithText("Signal GPS en attente").assertIsDisplayed()
+        compose.onNodeWithText("Le suivi est actif").assertIsDisplayed()
+        compose.onNodeWithText("Activez le GPS").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Activer le GPS depuis la carte").assertDoesNotExist()
+        compose.runOnIdle {
+            assertEquals(1, starts)
+            dashboard.value = dashboard.value.copy(latitude = 48.445, longitude = 1.982, speedKmh = 0f)
+        }
+        compose.onNodeWithText("Prêt à partir").assertIsDisplayed()
+        compose.onNodeWithText("Signal GPS en attente").assertDoesNotExist()
+        // A stale fix is still a running GPS session, not a new authorization request.
+        compose.runOnIdle { dashboard.value = dashboard.value.copy(speedKmh = null) }
+        compose.onNodeWithText("Signal GPS en attente").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Activer le GPS depuis la carte").assertDoesNotExist()
+        compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.VerticalScrollAxisRange),
+            useUnmergedTree = true).assertCountEquals(0)
+    }
+
     @Test fun fullscreenCanBeOpenedAndSearchReturnsToDestinationPicker() {
         var searches = 0
         compose.setContent {

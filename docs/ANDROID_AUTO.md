@@ -6,11 +6,21 @@ Les barres et commandes propres à Android Auto restent gérées par l’hôte. 
 
 ## Mise à jour sur le S23
 
-Le propriétaire a confirmé que **Cockpit GPS 0.3 fonctionne dans Android Auto après installation avec KingInstaller sur son Samsung S23**. Pour essayer la 0.4 publiée, télécharger `cockpit-0.4.0.apk` depuis la [page de distribution](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) et reprendre la même méthode.
+Le propriétaire a confirmé que **Cockpit GPS 0.3 fonctionne dans Android Auto après installation avec KingInstaller sur son Samsung S23**. Pour essayer la mise à jour 0.4.1, télécharger `cockpit-0.4.1.apk` depuis la [page de distribution](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.1) et reprendre la même méthode.
 
-Android doit proposer une **mise à jour**, pas demander de désinstaller Cockpit GPS. Les versions 0.3 et 0.4 utilisent toutes deux `fr.cockpit.gps` et la même signature. Les compteurs, favoris et autorisations existants sont conservés. Si Android indique une signature incompatible, conserver l’installation actuelle et vérifier le fichier utilisé ; un APK `debug` local n’est pas l’APK signé distribué.
+Android doit proposer une **mise à jour**, pas demander de désinstaller Cockpit GPS. Les versions 0.3.0, 0.4.0 et 0.4.1 utilisent `fr.cockpit.gps` et la même signature. Une mise à jour compatible conserve les compteurs, favoris et autorisations déjà accordées ; Cockpit ne réinitialise pas les accès Android. Si Android indique une signature incompatible, conserver l’installation actuelle et vérifier le fichier utilisé ; un APK `debug` local n’est pas l’APK signé distribué.
 
-KingInstaller est un outil externe. Le retour positif sur la version 0.3 concerne ce S23 ; il ne garantit pas la prise en charge d’autres téléphones, versions d’Android Auto ou autoradios. Le nouveau dashboard projeté de la 0.4 doit encore être essayé sur l’autoradio réel.
+KingInstaller est un outil externe. Le retour positif sur la version 0.3 concerne ce S23 ; il ne garantit pas la prise en charge d’autres téléphones, versions d’Android Auto ou autoradios. Le dashboard projeté et les corrections de reprise des accès de la 0.4.1 restent à confirmer sur l’autoradio réel ; les tests logiciels ne prouvent pas que le problème signalé sur le S23 est résolu.
+
+## Autorisations et reprise après mise à jour
+
+Installer la nouvelle version par-dessus l’ancienne avec KingInstaller conserve la même application. Les accès Android déjà accordés doivent rester disponibles ; Cockpit les vérifie avant de proposer une demande. Il n’est pas nécessaire de les désactiver puis de les réactiver à chaque mise à jour.
+
+La version 0.4.1 tente de reconnecter le service de musique lorsqu’Android l’a déconnecté et que l’accès spécial aux notifications est encore accordé. Cette reconnexion ne donne aucune autorisation supplémentaire. Ouvrir Apple Music et lancer un morceau si aucune session musicale n’est disponible. L’autorisation d’afficher les notifications de suivi est distincte de cet accès musical : après un refus, Cockpit ne la redemande plus à chaque démarrage du suivi. Elle peut être réactivée dans les paramètres Android.
+
+Sur le téléphone, démarrer le suivi avec son bouton est une action d’enregistrement, pas une nouvelle autorisation GPS. Avec le suivi actif et aucune position disponible, le dashboard affiche une recherche du signal ; la carte et la météo attendent également la position. Vérifier que la localisation du téléphone est activée et attendre le signal, sans retirer puis redonner les accès. Le suivi se démarre sur le téléphone, à l’arrêt, avant de passer à Android Auto.
+
+Si Android demande réellement la localisation, choisir **Lorsque l’application est utilisée**, avec la position **précise**, pour conserver cet accès entre sessions. **Seulement cette fois** accorde un accès temporaire. Cockpit ne peut pas restaurer lui-même une permission refusée, expirée ou révoquée. Le correctif améliore la reprise des services et les messages ; son effet sur le problème d’autorisations rapporté sur le S23 reste à vérifier sur cet appareil.
 
 ## Surface et interactions
 
@@ -28,7 +38,7 @@ Le rendu partagé répond à la demande d’une interface privée identique à c
 
 La technique Compose avec écran virtuel est documentée par Google pour le rendu sur une surface. Son utilisation ne dispense pas des règles portant sur le contenu affiché. Pour une distribution officielle Android Auto, il faudrait adapter l’interface aux critères, réaliser les validations requises et préparer un canal compatible dans Google Play Console. La cible Android actuelle est API 35 ; une future soumission doit intégrer les exigences de niveau cible applicables, notamment API 36.
 
-Aucun compte Play Console ni déploiement Google Play n’est configuré ici. Le bundle signé `cockpit-0.4.0.aab` ne s’installe pas directement et ne prouve aucune approbation Google Play. Une distribution Play peut employer un certificat différent, notamment via le partage interne ; préserver la compatibilité de signature est nécessaire pour les mises à jour des installations existantes. Voir [SIGNING.md](SIGNING.md).
+Aucun compte Play Console ni déploiement Google Play n’est configuré ici. Le bundle signé `cockpit-0.4.1.aab` ne s’installe pas directement et ne prouve aucune approbation Google Play. Une distribution Play peut employer un certificat différent, notamment via le partage interne ; préserver la compatibilité de signature est nécessaire pour les mises à jour des installations existantes. Voir [SIGNING.md](SIGNING.md).
 
 ## Vérification
 

@@ -44,6 +44,7 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
     private var framedCamera: MapCamera? = null
     private var navigationActive = false
     private var locationFresh = true
+    private var trackingActive = false
     private var speedKmh: Float? = null
     private var distanceToTurnMeters: Double? = null
     private var automaticZoom = true
@@ -95,12 +96,12 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
 
     fun updateLocation(latitude: Double?, longitude: Double?, bearing: Float? = null) {
         updateState(latitude, longitude, routePoints, bearing, accuracyMeters, destination, progressFraction,
-            speedKmh, distanceToTurnMeters, navigationActive, locationFresh)
+            speedKmh, distanceToTurnMeters, navigationActive, locationFresh, trackingActive)
     }
 
     fun updateRoute(points: List<GeoPoint>) {
         updateState(latitude, longitude, points, bearing, accuracyMeters, destination, progressFraction,
-            speedKmh, distanceToTurnMeters, navigationActive, locationFresh)
+            speedKmh, distanceToTurnMeters, navigationActive, locationFresh, trackingActive)
     }
 
     fun updateState(
@@ -108,13 +109,14 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         accuracyMeters: Float? = null, destination: GeoPoint? = null, progressFraction: Float = 0f,
         speedKmh: Float? = null, distanceToTurnMeters: Double? = null,
         navigationActive: Boolean = false, locationFresh: Boolean = true,
+        trackingActive: Boolean = false,
     ) {
         val enteringNavigation = navigationActive && !this.navigationActive
         val changed = this.latitude != latitude || this.longitude != longitude || this.routePoints != routePoints ||
             this.bearing != bearing || this.accuracyMeters != accuracyMeters || this.destination != destination ||
             this.progressFraction != progressFraction || this.speedKmh != speedKmh ||
             this.distanceToTurnMeters != distanceToTurnMeters || this.navigationActive != navigationActive ||
-            this.locationFresh != locationFresh
+            this.locationFresh != locationFresh || this.trackingActive != trackingActive
         this.latitude = latitude
         this.longitude = longitude
         this.routePoints = routePoints
@@ -127,6 +129,7 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         this.distanceToTurnMeters = distanceToTurnMeters
         this.navigationActive = navigationActive
         this.locationFresh = locationFresh
+        this.trackingActive = trackingActive
         if (enteringNavigation) {
             following = true
             overview = false
@@ -305,7 +308,7 @@ class RouteMapView @JvmOverloads constructor(context: Context, attributes: Attri
         renderer?.render(canvas, width, height, latitude, longitude, routePoints, bearing,
             camera = currentCamera(), headingUp = headingUp && !overview, nightMode = nightMode,
             accuracyMeters = accuracyMeters, destination = destination, progressFraction = progressFraction,
-            orientationBearing = mapBearing(), locationFresh = locationFresh)
+            orientationBearing = mapBearing(), locationFresh = locationFresh, trackingActive = trackingActive)
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {

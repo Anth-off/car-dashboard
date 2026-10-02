@@ -1,3 +1,31 @@
+Cockpit GPS 0.4.1 — vérification du 2 octobre 2026
+
+CORRECTIF DE REPRISE ET D’INDICATIONS
+Le propriétaire a précisé qu’Android ne redemande pas les autorisations : il les désactive/réactive manuellement dans les réglages pour relancer les fonctions après une mise à jour via KingInstaller sans désinstallation. La capture montre les compteurs conservés, un suivi GPS démarré et une session Apple Music reconnue. Cela ne prouve pas une révocation des accès ni la cause exacte sur le S23.
+
+- MainActivity vérifie toujours les permissions Android réelles. Une autorisation déjà accordée ne déclenche pas de demande. La préférence ajoutée mémorise uniquement la question de notifications déjà traitée, jamais une autorisation : après un refus, pas de nouvelle sollicitation à chaque trajet.
+- Une déconnexion du listener musical nettoie la session et demande une reconnexion seulement si Android accorde encore l’accès. Une requête par interruption, réarmée à la reconnexion effective. Aucun accès n’est retiré/réaccordé, et le lancement normal ne force pas une reconnexion du listener.
+- La carte et le pied de navigation distinguent suivi arrêté et signal GPS attendu. Le message d’activation ne réapparaît plus pendant un suivi déjà actif. Le démarrage GPS reste explicite depuis le téléphone ; aucun démarrage automatique en arrière-plan n’est ajouté.
+
+VALIDATION LOCALE
+99 tests JVM/Robolectric réussis, zéro échec, zéro erreur et zéro ignoré. Les 7 tests ajoutés couvrent :
+- ouverture/réouverture et démarrage avec permissions déjà accordées, sans nouvelle demande ;
+- refus de notifications non redemandé sur un autre trajet ou après réouverture ;
+- localisation absente demandée seulement au démarrage explicite ;
+- déconnexion musicale autorisée, nettoyage et absence de boucle de reconnexion ;
+- accès musical retiré : pas de tentative de reconnexion ;
+- reconnexion : morceau retrouvé sans basculer l’accès et sans doubler les callbacks ;
+- transition suivi arrêté → attente GPS → position → position périmée, sans invitation à réactiver et sans défilement.
+
+APK et AAB release compilés ; Android Lint release sans erreur. Signatures APK/AAB vérifiées avec le même certificat que la 0.3/0.4 :
+83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30
+Identité conservée fr.cockpit.gps ; versionName 0.4.1, versionCode 5. Les aperçus Robolectric téléphone et Presentation ont été régénérés avec le nouveau libellé de suivi en pause.
+
+Publication 0.4.1 : en préparation. La validation logicielle ne constitue pas un essai de mise à jour sur Samsung ; la résolution de l’interruption signalée reste à confirmer sur le S23 et l’autoradio réels. Les tests de reconnexion utilisent les callbacks Android sous Robolectric, pas une vraie session Apple Music. Une autorisation réellement refusée/retirée doit toujours être accordée par l’utilisateur. Le correctif ne diagnostique pas toutes les causes possibles d’absence de signal GPS.
+
+HISTORIQUE DE VÉRIFICATION 0.4.0
+Les données ci-dessous concernent la version précédente ; ses captures ont été remplacées par les rendus 0.4.1.
+
 Cockpit GPS 0.4.0 — vérification du 2 octobre 2026
 
 INSTALLATION : mise à jour de Cockpit GPS 0.3.0, même application fr.cockpit.gps, versionCode 4. La clé persistante de la 0.3 est réutilisée ; aucune nouvelle clé n’est créée. L’installation prévue se fait par-dessus la 0.3 sans désinstallation, avec conservation des compteurs, favoris et autorisations. Le propriétaire a confirmé le fonctionnement de la 0.3 sur son Samsung S23 dans Android Auto après installation avec KingInstaller. Le fonctionnement du nouveau dashboard 0.4 sur cet autoradio reste à vérifier.

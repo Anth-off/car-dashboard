@@ -71,6 +71,7 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
         densityOverride: Float? = null,
         orientationBearing: Float? = null,
         locationFresh: Boolean = true,
+        trackingActive: Boolean = false,
     ) {
         if (closed || width <= 0 || height <= 0) return
         density = densityOverride?.takeIf { it.isFinite() && it > 0 }?.coerceIn(.75f, 3f) ?: defaultDensity
@@ -83,7 +84,7 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
             ?: frameRoute(routePoints, width, height)
         if (viewport == null) {
             tileStore.setVisible(emptySet())
-            drawWaiting(canvas, width, height, nightMode)
+            drawWaiting(canvas, width, height, nightMode, trackingActive)
             drawAttribution(canvas, width, height)
             canvas.restoreToCount(saved)
             return
@@ -342,7 +343,7 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
         }
     }
 
-    private fun drawWaiting(canvas: Canvas, width: Int, height: Int, nightMode: Boolean) {
+    private fun drawWaiting(canvas: Canvas, width: Int, height: Int, nightMode: Boolean, trackingActive: Boolean) {
         paint.reset()
         paint.strokeWidth = 1f
         paint.color = if (nightMode) Color.rgb(31, 45, 48) else Color.rgb(219, 228, 215)
@@ -357,8 +358,10 @@ class RouteMapRenderer(context: Context, private val onInvalidate: () -> Unit) {
         paint.color = if (nightMode) Color.rgb(47, 69, 70) else Color.rgb(190, 207, 190)
         canvas.drawCircle(width / 2f, height / 2f - 25f * density, 42f * density, paint)
         canvas.drawCircle(width / 2f, height / 2f - 25f * density, 61f * density, paint)
-        drawBadge(canvas, width / 2f, height / 2f + 5f * density, "Position GPS en attente", 13f)
-        drawBadge(canvas, width / 2f, height / 2f + 34f * density, "Démarrez le suivi pour afficher la carte", 10f)
+        drawBadge(canvas, width / 2f, height / 2f + 5f * density,
+            if (trackingActive) "Signal GPS en attente" else "Suivi GPS en pause", 13f)
+        drawBadge(canvas, width / 2f, height / 2f + 34f * density,
+            if (trackingActive) "Le suivi est actif" else "Démarrez le suivi pour afficher la carte", 10f)
     }
 
     private fun drawCompass(canvas: Canvas, x: Float, y: Float, angle: Float) {

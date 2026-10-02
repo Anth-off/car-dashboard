@@ -115,7 +115,8 @@ private fun NavigationSurface(
                         data.accuracyMeters.takeIf { data.speedKmh != null },
                         nav.destination?.let { fr.cockpit.dashboard.navigation.GeoPoint(it.latitude, it.longitude) },
                         nav.progressFraction.toFloat(), data.speedKmh, nav.distanceToTurnMeters,
-                        navigationActive = nav.active, locationFresh = !nav.gpsPaused && data.speedKmh != null)
+                        navigationActive = nav.active, locationFresh = !nav.gpsPaused && data.speedKmh != null,
+                        trackingActive = data.recording)
                     if (projection == null) view.setNightMode(night)
                 })
                 Row(Modifier.align(Alignment.TopStart).padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -151,8 +152,15 @@ private fun NavigationSurface(
             } else Row(Modifier.fillMaxWidth().height(52.dp).background(GuidancePanel).padding(horizontal = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(if (hasPosition) "Prêt à partir" else "Activez le GPS", fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold)
-                    Text(nav.error ?: "Votre route, en un coup d’œil", fontSize = 10.sp, lineHeight = 13.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(when {
+                        !data.recording -> "Activez le GPS"
+                        !hasPosition || data.speedKmh == null -> "Signal GPS en attente"
+                        else -> "Prêt à partir"
+                    }, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(nav.error ?: if (data.recording && (!hasPosition || data.speedKmh == null))
+                        "Le suivi est actif" else "Votre route, en un coup d’œil",
+                        fontSize = 10.sp, lineHeight = 13.sp, color = Muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 if (!data.recording) IconButton(onClick = onTracking, modifier = Modifier.size(48.dp)) { Icon(Icons.Rounded.MyLocation, "Activer le GPS depuis la carte", tint = NavigationBlue) }
                 if (nav.error != null && nav.destination != null) IconButton(onClick = onReroute, modifier = Modifier.size(48.dp)) {

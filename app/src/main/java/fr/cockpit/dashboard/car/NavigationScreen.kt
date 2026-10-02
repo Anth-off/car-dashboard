@@ -167,8 +167,12 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
                 .build()
             else -> {
                 val message = state.error
-                    ?: if (trip.state.value.latitude == null) "Démarrez le suivi GPS sur le téléphone, à l’arrêt."
-                    else "Choisissez une destination pour démarrer."
+                    ?: when {
+                        !trip.state.value.recording -> "Démarrez le suivi GPS sur le téléphone, à l’arrêt."
+                        trip.state.value.latitude == null || trip.state.value.longitude == null ->
+                            "Signal GPS en attente. Le suivi est actif."
+                        else -> "Choisissez une destination pour démarrer."
+                    }
                 MessageInfo.Builder("Cockpit").setText(message).build()
             }
         }
@@ -246,6 +250,7 @@ internal class NavigationScreen(carContext: CarContext) : LiveCarScreen(carConte
                 destination = guidance.destination?.let { GeoPoint(it.latitude, it.longitude) },
                 progressFraction = guidance.progressFraction.toFloat(),
                 densityOverride = surfaceDensity,
+                trackingActive = position.recording,
                 locationFresh = guidance.isSimulation || (position.recording && position.error == null &&
                     position.lastFixEpochMillis?.let { System.currentTimeMillis() - it in 0L..7_000L } == true),
             )

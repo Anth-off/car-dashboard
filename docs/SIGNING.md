@@ -1,10 +1,10 @@
 # Signature et mises à jour de Cockpit GPS
 
-**La version 0.4.0 est une mise à jour de Cockpit GPS 0.3.0.** Elle conserve l’identifiant `fr.cockpit.gps` et la même clé de signature ; son `versionCode` passe de 3 à 4. Elle s’installe par-dessus la 0.3 sans désinstallation et conserve ses compteurs, favoris et autorisations. Aucune nouvelle clé n’est générée pour cette version.
+**La version 0.4.1 est une mise à jour de Cockpit GPS 0.3.0 ou 0.4.0.** Elle conserve l’identifiant `fr.cockpit.gps` et la même clé de signature ; son `versionCode` passe à 5. Elle s’installe par-dessus la 0.3 ou la 0.4 sans désinstallation et conserve ses compteurs, favoris et autorisations. Aucune nouvelle clé n’est générée pour cette version.
 
-Le propriétaire a confirmé l’installation de la 0.3 sur son Samsung S23 avec KingInstaller. Reprendre cette méthode avec `cockpit-0.4.0.apk` doit proposer une mise à jour de Cockpit GPS. La compatibilité de cette méthode externe sur d’autres appareils, et le fonctionnement du nouveau dashboard projeté 0.4 sur véhicule, restent à vérifier.
+Le propriétaire a confirmé l’installation de la 0.3 sur son Samsung S23 avec KingInstaller. Reprendre cette méthode avec `cockpit-0.4.1.apk` doit proposer une mise à jour de Cockpit GPS. La compatibilité de cette méthode externe sur d’autres appareils, et le fonctionnement du nouveau dashboard projeté 0.4 sur véhicule, restent à vérifier.
 
-La [page de distribution 0.4.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.0) est prévue pour **`cockpit-0.4.0.apk`** et **`cockpit-0.4.0.aab`**, signés en variante `release`. Leur disponibilité dépend de la réussite du workflow de publication. La [version 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) reste disponible.
+La [page de distribution 0.4.1](https://github.com/Anth-off/car-dashboard/releases/tag/v0.4.1) est prévue pour **`cockpit-0.4.1.apk`** et **`cockpit-0.4.1.aab`**, signés en variante `release`. Leur disponibilité dépend de la réussite du workflow de publication. La [version 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) reste disponible.
 
 Cockpit 0.2 utilise un autre identifiant, `fr.cockpit.dashboard`. Cockpit GPS reste installé à côté de cette ancienne application, dont les données ne sont pas transférées automatiquement. Une première installation de Cockpit GPS commence avec des compteurs à zéro et des favoris à recréer ; cette limitation ne concerne pas la mise à jour 0.3 vers 0.4.
 
@@ -28,7 +28,7 @@ Cockpit GPS réutilise la clé persistante de sa première version 0.3. Son cert
 83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30
 ```
 
-Ce certificat concerne **Cockpit GPS 0.3 et ses mises à jour**, dont la 0.4 ; il ne rétablit pas la compatibilité avec l’ancien Cockpit 0.2.
+Ce certificat concerne **Cockpit GPS 0.3 et ses mises à jour**, dont la 0.4.1 ; il ne rétablit pas la compatibilité avec l’ancien Cockpit 0.2.
 
 Pour mettre à jour Cockpit GPS sans réinstallation et conserver ses données, garder l’identifiant `fr.cockpit.gps`, augmenter `versionCode` et signer avec cette même clé. Gradle et les scripts de publication refusent une signature différente. Ne pas recréer une clé à chaque compilation.
 
