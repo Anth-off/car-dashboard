@@ -1,9 +1,10 @@
-Cockpit 0.3.0 — sources et vérification du 2 octobre 2026
+Cockpit GPS 0.3.0 — vérification du 2 octobre 2026
 
-STATUT INSTALLATION : aucune mise à jour installable publiée. La clé privée de signature de l'APK GitHub 0.2.0 n'a pas été conservée. Une signature différente ne peut pas mettre à jour cette installation. Aucun effacement, désinstallation ou migration de l'utilisateur effectué.
+INSTALLATION : nouvelle application Cockpit GPS (fr.cockpit.gps), versionCode 3. Elle s’installe à côté de Cockpit 0.2.0 (fr.cockpit.dashboard), sans désinstallation. La clé privée de la 0.2.0 a été perdue ; aucune mise à jour directe ni migration des compteurs/favoris vers Cockpit GPS n’est effectuée. La nouvelle clé de publication est conservée dans un dossier privé hors dépôt et une archive privée remise au propriétaire doit être sauvegardée hors de cet espace de travail.
 
-Compilation du build de développement : réussie.
-Android Lint : aucune erreur ; avertissements non bloquants.
+Compilation des APK et AAB release signés : réussie.
+APK non débogable : fr.cockpit.gps, versionName 0.3.0, versionCode 3, libellé Cockpit GPS.
+Android Lint release : aucune erreur ; avertissements non bloquants.
 76 tests JVM/Robolectric réussis, dont :
 - CarTemplateSmokeTest : 9
 - DestinationRepositoryTest : 7
@@ -22,7 +23,7 @@ Android Lint : aucune erreur ; avertissements non bloquants.
 
 Écrans contrôlés : 412×915, 851×393, 360×640 dp, avec texte jusqu'à 130 % et clavier paysage simulé. Contrôles complets dans le viewport, aucune liste/panneau défilant. Les longs contenus sont paginés.
 
-Signature : APK GitHub 0.2.0 accepté par le certificat épinglé ; APK local signé avec une autre clé refusé ; AAB non signé refusé ; AAB altéré avec une entrée non signée refusé. Le contrôle Gradle de publication refuse une configuration de clé manquante. Aucun keystore ni secret créé ou publié.
+Signature : APK et AAB release acceptés avec le même certificat SHA-256 épinglé : 83fdf41f8f5317e64d3c70c642cff890a83c09756afc38e3e0c53c1d219aaf30. APK historique 0.2.0 refusé par ce nouveau contrôle. Aucun keystore ni secret n’est présent dans les fichiers publics. La publication vérifie aussi les identités APK/AAB, les sommes SHA-256, le contenu exact de l’archive des sources et le succès des contrôles CI du commit source.
 
 Routage public vérifié entre points proches des centres de Sainville et Dourdan : deux serveurs OSRM automobiles retournent D5/D17 17,54 km / 23 min et D17/D838 18,46 km / 25,3 min. Points approximatifs, sans adresses domicile/travail ni trafic réel. Le choix est le plus rapide parmi les alternatives reçues, pas une garantie sur toutes les routes.
 

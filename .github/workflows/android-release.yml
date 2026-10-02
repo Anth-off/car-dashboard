@@ -68,7 +68,7 @@ jobs:
 
           metadata = json.loads(Path("app/build/outputs/apk/release/output-metadata.json").read_text())
           outputs = metadata["elements"]
-          if metadata["applicationId"] != "fr.cockpit.dashboard" or len(outputs) != 1:
+          if metadata["applicationId"] != "fr.cockpit.gps" or len(outputs) != 1:
               raise SystemExit("Unexpected application identity or APK outputs")
           if f'v{outputs[0]["versionName"]}' != os.environ["RELEASE_TAG"]:
               raise SystemExit("Release tag differs from the compiled application version")
@@ -88,9 +88,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cat > release-notes.md <<'EOF'
-          Cockpit : dashboard et menus sans défilement sur téléphone et Android Auto.
+          Cockpit GPS : dashboard et menus sans défilement sur téléphone et Android Auto.
 
-          APK et AAB signés après les tests JVM/Robolectric et Android Lint. La publication vérifie que le certificat correspond à celui de Cockpit 0.2.0 et que le numéro de version augmente. L'installation d'une mise à jour compatible conserve les compteurs et favoris locaux.
+          APK et AAB signés après les tests JVM/Robolectric et Android Lint. La publication vérifie le certificat permanent de Cockpit GPS. La version 0.3.0 utilise le nouveau package fr.cockpit.gps : elle s’installe à côté de Cockpit 0.2.0 sans le désinstaller. Les compteurs et favoris restent dans l’ancienne application ; ils ne sont pas importés. Les versions suivantes doivent conserver le package et la clé de Cockpit GPS pour permettre les mises à jour.
 
           Les essais sur autoradio et avec une session Apple Music réelle restent à effectuer. Pour Android Auto, utiliser un canal de test Google Play compatible avec la Car App Library ; une installation directe ne suffit pas. Ces fichiers restent réservés aux essais, sans trafic en direct ni garantie des services publics de navigation.
           EOF
@@ -100,10 +100,10 @@ jobs:
             exit 1
           fi
           if [[ "$release_state" != true ]]; then
-            gh release create "$RELEASE_TAG" --draft --prerelease --target "$GITHUB_SHA" --title "Cockpit ${RELEASE_TAG#v}" --notes-file release-notes.md
+            gh release create "$RELEASE_TAG" --draft --prerelease --target "$GITHUB_SHA" --title "Cockpit GPS ${RELEASE_TAG#v}" --notes-file release-notes.md
           fi
           gh release upload "$RELEASE_TAG" release-artifacts/* --clobber
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease --target "$GITHUB_SHA" --title "Cockpit ${RELEASE_TAG#v}" --notes-file release-notes.md
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease --target "$GITHUB_SHA" --title "Cockpit GPS ${RELEASE_TAG#v}" --notes-file release-notes.md
       - name: Remove restored signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/cockpit-signing.keystore"

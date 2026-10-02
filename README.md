@@ -1,10 +1,14 @@
-# Cockpit
+# Cockpit GPS
 
 Application Android native en français : tableau de bord sombre, navigation propre à l’application, commandes Apple Music et mesures GPS. Android 10 ou plus récent.
 
-**Sources 0.3.0 en préparation — aucune nouvelle mise à jour installable publiée.** Le certificat de signature de l’APK GitHub 0.2.0 est connu, mais sa clé privée n’a pas été conservée sur le runner de compilation. Android interdit donc sa mise à jour directe avec les clés disponibles. La publication est maintenant bloquée si la clé est absente ou différente : [détails et contrôles de signature](docs/SIGNING.md). Il ne faut pas désinstaller la version actuellement installée pour essayer un APK local.
+À partir de la version **0.3.0**, l’application s’appelle **Cockpit GPS** et utilise l’identifiant `fr.cockpit.gps`. Elle s’installe **à côté de Cockpit 0.2**, sans désinstaller l’ancienne application. Ce n’est pas une mise à jour de l’installation 0.2 : ses compteurs et favoris restent dans l’ancienne application ; Cockpit GPS démarre avec des compteurs à zéro et des favoris à recréer.
 
-[Version de test 0.2 déjà publiée](https://github.com/Anth-off/car-dashboard/releases/tag/v0.2.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
+La clé de signature de la version 0.2 n’a pas été sauvegardée par son ancien workflow. Cockpit GPS utilise une nouvelle clé persistante et un contrôle de certificat pour ses prochaines mises à jour. Conserver cette clé et sa sauvegarde privée est indispensable : [signature et mises à jour](docs/SIGNING.md).
+
+[Page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0) · [Historique des versions](https://github.com/Anth-off/car-dashboard/releases)
+
+La publication prévoit `cockpit-0.3.0.apk` pour le téléphone et `cockpit-0.3.0.aab` pour un canal de test Google Play. Les téléchargements deviennent disponibles après la réussite du workflow de publication.
 
 ![Dashboard sans défilement sur téléphone, au repos](artifacts/cockpit-landscape.png)
 
@@ -32,12 +36,14 @@ Les compteurs mesurent **uniquement les déplacements enregistrés pendant le su
 
 ## Essayer sur le téléphone
 
-1. Pour les développeurs, installer un build local sur un appareil de test distinct. Un APK local ne constitue pas une mise à jour de la 0.2 GitHub. Ouvrir Cockpit et autoriser la localisation **précise** lors du démarrage du suivi. Le suivi se lance depuis l’application visible et reste signalé par une notification.
-2. Dans les réglages Cockpit, activer la météo si souhaité. Autoriser les notifications Android pour voir le suivi et les indications hors de l’application.
-3. Pour la musique, accorder à Cockpit l’accès spécial aux notifications, puis ouvrir Apple Music et lancer un morceau. Le contrôle nécessite une session Apple Music active ; l’application ne fournit ni abonnement ni catalogue musical.
+1. Télécharger **`cockpit-0.3.0.apk`** depuis la [page de distribution 0.3.0](https://github.com/Anth-off/car-dashboard/releases/tag/v0.3.0), puis l’installer. Ouvrir **Cockpit GPS**, distinct de l’ancien Cockpit, et autoriser la localisation **précise** lors du démarrage du suivi. Le suivi se lance depuis l’application visible et reste signalé par une notification.
+2. Dans les réglages Cockpit GPS, activer la météo si souhaité. Autoriser les notifications Android pour voir le suivi et les indications hors de l’application.
+3. Pour la musique, accorder à Cockpit GPS l’accès spécial aux notifications, puis ouvrir Apple Music et lancer un morceau. Le contrôle nécessite une session Apple Music active ; l’application ne fournit ni abonnement ni catalogue musical.
 4. Utiliser la loupe de la carte pour rechercher une destination, sélectionner un favori ou un trajet récent. L’étoile ajoute/retire un favori ; les résultats de recherche ne sont pas enregistrés automatiquement. Un trajet calculé avec succès rejoint les récents.
 5. Accepter l’utilisation du calcul d’itinéraire en ligne, puis attendre une position GPS. Les boutons de carte permettent d’agrandir, zoomer, recentrer et afficher tout le trajet ; le haut-parleur coupe les annonces et le bouton d’itinéraires ouvre les alternatives et les étapes paginées.
 6. Arrêter le suivi pour mettre fin à l’enregistrement. Le compteur trajet reste conservé jusqu’à sa remise à zéro ; le total reste conservé.
+
+Conserver Cockpit 0.2 si ses compteurs ou favoris sont utiles. Les deux applications ont des données et des autorisations séparées ; aucune migration automatique n’est effectuée. Les prochaines versions de **Cockpit GPS** pourront remplacer cette nouvelle installation en conservant ses données, à condition de garder son identifiant et sa clé de signature.
 
 Les versions Android récentes peuvent limiter l’accès aux notifications pour une application installée manuellement. Le téléphone indique alors les réglages supplémentaires disponibles dans sa fiche d’application. Cockpit n’active aucune permission automatiquement.
 
@@ -45,11 +51,13 @@ Les versions Android récentes peuvent limiter l’accès aux notifications pour
 
 L’installation directe de l’APK permet de tester **le téléphone**. Pour une application basée sur la Car App Library, l’option Android Auto « Sources inconnues » ne suffit pas à la rendre disponible sur l’autoradio.
 
-La voie officielle pour un véhicule réel est l’**Internal App Sharing** ou une piste de test interne dans **Google Play Console**, puis l’installation par le lien Google Play avec le compte testeur. Le partage interne d’applications accepte des versions de débogage ; une piste de test classique nécessite une version release et votre signature d’envoi. Le compte Play Console et les éventuelles exigences de configuration doivent être fournis par le propriétaire du projet. Aucun envoi ou déploiement sur Google Play n’est effectué par ce dépôt.
+La voie officielle pour un véhicule réel est l’**Internal App Sharing** ou une piste de test interne dans **Google Play Console**, puis l’installation par le lien Google Play avec le compte testeur. Le fichier **`cockpit-0.3.0.aab`** est un bundle `release` signé, destiné à préparer cette distribution. Un compte Play Console et sa configuration sont nécessaires ; aucun accès à ce compte ni déploiement Google Play n’est configuré ici. La publication GitHub ne rend donc pas, à elle seule, l’application disponible dans Android Auto.
+
+Google Play peut utiliser une autre signature, notamment pour le partage interne. Avant de passer de l’APK GitHub à une distribution Play, vérifier la compatibilité des certificats : ce changement de canal n’est pas automatiquement une mise à jour compatible.
 
 1. Charger un APK/AAB accepté par le canal choisi dans votre Play Console.
-2. Installer Cockpit depuis son lien de test, préparer les autorisations et les favoris sur le téléphone, à l’arrêt.
-3. Démarrer le suivi GPS depuis le téléphone, connecter Android Auto, puis ouvrir Cockpit dans le lanceur d’applications.
+2. Installer Cockpit GPS depuis son lien de test, préparer les autorisations et les favoris sur le téléphone, à l’arrêt.
+3. Démarrer le suivi GPS depuis le téléphone, connecter Android Auto, puis ouvrir Cockpit GPS dans le lanceur d’applications.
 4. Choisir une destination enregistrée. La navigation et la carte sont propres à Cockpit ; Waze n’est pas intégré.
 
 Le service est déclaré comme application **NAVIGATION** et implémente le calcul d’itinéraire et les instructions virage par virage. La conformité complète doit encore être vérifiée dans le Desktop Head Unit et sur véhicule avant distribution. Le rendu personnalisé Compose du téléphone ne remplace pas le lanceur Android Auto.
@@ -72,9 +80,17 @@ Fichiers produits :
 - `app/build/reports/tests/testDebugUnitTest/index.html`
 - `app/build/reports/lint-results-debug.html`
 
-La signature debug est réservée aux essais. Une distribution publique nécessite votre configuration de signature, votre identifiant d’application et la validation de toutes les exigences Android Auto. Le projet ne contient aucune clé privée, aucun jeton et aucune clé API de fournisseur.
+La signature `debug` est réservée au développement. Un APK de développement ne constitue pas une mise à jour de l’APK signé distribué. Les téléchargements destinés aux utilisateurs sont les variantes `release`, signées avec la clé persistante de Cockpit GPS. Le dépôt ne contient aucune clé privée, aucun jeton et aucune clé API de fournisseur.
 
-Le workflow **Android checks** compile et vérifie chaque changement sans publier d’APK. Le workflow **Android signed release** exige une clé persistante compatible avec le certificat publié, vérifie la signature de l’APK et de l’AAB et l’incrément de version avant publication. Il reste bloqué dans l’état actuel : voir [SIGNING.md](docs/SIGNING.md).
+Pour produire les versions signées, fournir les variables de signature décrites dans [SIGNING.md](docs/SIGNING.md), puis lancer :
+
+```sh
+./gradlew :app:assembleRelease :app:bundleRelease
+```
+
+Les fichiers sont `app/build/outputs/apk/release/app-release.apk` et `app/build/outputs/bundle/release/app-release.aab`.
+
+Le workflow **Android checks** compile et vérifie chaque changement sans publier d’APK. Le workflow de publication d’artefacts préparés contrôle les fichiers signés localement, leur certificat, leurs sommes de contrôle, leur version, leurs sources et les vérifications CI avant l’envoi sur GitHub Releases ; il n’a pas besoin de la clé privée. Le workflow **Android signed release** permet une compilation future dans GitHub Actions avec des secrets de signature persistants. Ces secrets ne sont pas configurés par défaut ; ce second workflow refuse de publier si la clé est absente ou différente du certificat épinglé.
 
 ## Données, fournisseurs et limites
 

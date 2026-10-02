@@ -38,7 +38,7 @@ val checkCockpitReleaseSigning by tasks.registering {
             .joinToString("") { "%02x".format(it) }
         val expected = rootProject.file("docs/release-signing-certificate.sha256").readText().trim()
         check(fingerprint == expected) {
-            "Release signing differs from the published Cockpit 0.2.0 identity; in-place updates would fail. See docs/SIGNING.md."
+            "Release signing differs from the pinned Cockpit GPS identity; in-place updates would fail. See docs/SIGNING.md."
         }
     }
 }
@@ -48,7 +48,7 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "fr.cockpit.dashboard"
+        applicationId = "fr.cockpit.gps"
         minSdk = 29
         targetSdk = 35
         versionCode = 3

@@ -11,3 +11,5 @@ artifacts/*.apk
 artifacts/*.aab
 artifacts/*.zip
 artifacts/SHA256SUMS.txt
+
+__pycache__/

@@ -102,7 +102,7 @@ def main() -> int:
             actual = keystore_certificate(path)
         if actual != expected:
             raise SigningError(
-                "Signing certificate differs from the published Cockpit 0.2.0 certificate. "
+                "Signing certificate differs from the pinned Cockpit GPS certificate. "
                 "Publishing would break in-place updates; publication is blocked. "
                 "See docs/SIGNING.md."
             )

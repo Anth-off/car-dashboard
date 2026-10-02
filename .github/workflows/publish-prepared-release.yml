@@ -1,0 +1,104 @@
+name: Publish prepared Android release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release tag
+        required: true
+        default: v0.3.0
+        type: string
+      artifact_commit:
+        description: Exact commit containing already signed public APK, AAB and source ZIP
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: android-signed-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RELEASE_TAG: ${{ inputs.version }}
+      ARTIFACT_COMMIT: ${{ inputs.artifact_commit }}
+      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate inputs
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$ARTIFACT_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+      - name: Check out release source
+        uses: actions/checkout@v4
+        with:
+          path: source
+          persist-credentials: false
+      - name: Check out public signed artifacts
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.artifact_commit }}
+          path: prepared
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install artifact verification tools
+        run: |
+          sdkmanager "build-tools;35.0.0"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/bundletool.jar" https://github.com/google/bundletool/releases/download/1.18.2/bundletool-all-1.18.2.jar
+          printf '378b5434cd1378bef6b2bc527b8c7f0ff2584b273830335bce54d6d0813c8584  %s\n' "$RUNNER_TEMP/bundletool.jar" | sha256sum --check --strict
+      - name: Verify source, successful checks, versions, checksums and signing certificates
+        run: |
+          python3 source/scripts/verify-prepared-release.py \
+            --source source --artifacts prepared --version "$RELEASE_TAG" \
+            --repository "$GH_REPO" --bundletool "$RUNNER_TEMP/bundletool.jar"
+      - name: Prepare draft release
+        run: |
+          cat > "$RUNNER_TEMP/release-notes.md" <<'EOF'
+          Cockpit GPS : grande carte, guidage vocal, carte orientée, zoom automatique, comparaison de plusieurs itinéraires et commandes sans défilement sur le téléphone et Android Auto.
+
+          **Installation sans supprimer Cockpit 0.2.0 :** cette version utilise le nouveau package `fr.cockpit.gps` et s'installe à côté de l'ancienne application. Les anciens compteurs, favoris et réglages restent dans Cockpit 0.2.0 ; ils ne sont pas transférés automatiquement. Ce téléchargement n'est pas une mise à jour directe de l'ancien package `fr.cockpit.dashboard`, dont la clé de signature n'a pas été conservée.
+
+          Cockpit GPS utilise une nouvelle clé de publication persistante. Ses futures mises à jour doivent conserver ce package et cette clé pour s'installer normalement et préserver ses données.
+
+          APK et AAB vérifiés avant publication : version, certificats, sommes SHA-256 et contrôles Android réussis pour le commit source exact. La clé privée n'est contenue dans aucun téléchargement ni dans la branche d'artefacts.
+
+          Les itinéraires restent sans trafic en direct. Les essais sur autoradio et avec Apple Music restent à effectuer. L'installation directe sert aux essais sur téléphone ; Android Auto nécessite un canal de distribution Google Play compatible avec la Car App Library. Cette release GitHub n'est pas une publication sur le Play Store.
+          EOF
+          release_state=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null || true)
+          if [[ "$release_state" == false ]]; then
+            echo "::error::This release is already published; choose a new version."
+            exit 1
+          fi
+          if [[ "$release_state" != true ]]; then
+            gh release create "$RELEASE_TAG" --draft --prerelease --target "$GITHUB_SHA" \
+              --title "Cockpit GPS ${RELEASE_TAG#v}" --notes-file "$RUNNER_TEMP/release-notes.md"
+          else
+            gh release edit "$RELEASE_TAG" --draft --prerelease --target "$GITHUB_SHA" \
+              --title "Cockpit GPS ${RELEASE_TAG#v}" --notes-file "$RUNNER_TEMP/release-notes.md"
+          fi
+          gh release upload "$RELEASE_TAG" --clobber \
+            "prepared/cockpit-${RELEASE_TAG#v}.apk" "prepared/cockpit-${RELEASE_TAG#v}.aab" \
+            prepared/cockpit-sources.zip prepared/SHA256SUMS.txt
+      - name: Verify uploaded asset digests before publication
+        run: |
+          python3 source/scripts/verify-prepared-release.py \
+            --source source --artifacts prepared --version "$RELEASE_TAG" \
+            --repository "$GH_REPO" --bundletool "$RUNNER_TEMP/bundletool.jar" --verify-uploaded
+      - name: Publish verified prerelease
+        run: |
+          gh release edit "$RELEASE_TAG" --draft=false --prerelease --target "$GITHUB_SHA" \
+            --title "Cockpit GPS ${RELEASE_TAG#v}" --notes-file "$RUNNER_TEMP/release-notes.md"

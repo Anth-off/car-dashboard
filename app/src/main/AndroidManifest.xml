@@ -18,7 +18,7 @@
         android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:icon="@drawable/ic_launcher"
-        android:label="Cockpit"
+        android:label="Cockpit GPS"
         android:theme="@style/Theme.Cockpit"
         android:supportsRtl="true"
         android:usesCleartextTraffic="false">
@@ -38,7 +38,7 @@
             android:exported="false" android:foregroundServiceType="location" />
         <service android:name=".integrations.MusicNotificationListener"
             android:exported="true"
-            android:label="Cockpit · commandes Apple Music"
+            android:label="Cockpit GPS · commandes Apple Music"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
